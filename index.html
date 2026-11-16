@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#107f86" />
     <title>词汇消消乐 · 考研英语同义词</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=7" />
   </head>
   <body>
     <div class="page-shell" id="app">
@@ -40,7 +40,7 @@
           <div class="timer-card" id="timer-card">
             <div class="timer-copy">
               <span class="hud-label">剩余时间</span>
-              <strong><span id="timer">30</span><small>s</small></strong>
+              <strong><span id="timer">60</span><small>s</small></strong>
             </div>
             <div class="timer-track" aria-hidden="true"><span id="timer-fill"></span></div>
           </div>
@@ -48,7 +48,7 @@
 
         <div class="progress-row">
           <div class="progress-copy">
-            <span id="progress">已配对 0 / 5</span>
+          <span id="progress">已配对 0 / 6</span>
             <span class="progress-tip">找到同义词，连击得分更高</span>
           </div>
           <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
@@ -67,6 +67,14 @@
           </div>
 
           <div class="status-line" id="status-line" aria-live="polite">点击任意词块开始配对</div>
+          <div class="rating-overlay" id="rating-overlay" hidden aria-live="assertive">
+            <span class="rating-rays" aria-hidden="true"></span>
+            <strong id="rating-label">PERFECT</strong>
+            <span id="rating-bonus">+100</span>
+            <div class="rating-sparks" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+          </div>
           <div class="tile-grid" id="game-board" role="grid" aria-label="英文词块"></div>
         </section>
 
@@ -91,6 +99,34 @@
       </main>
     </div>
 
+    <div class="review-backdrop" id="review-modal" hidden>
+      <section class="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title">
+        <header class="review-header">
+          <div class="review-icon" aria-hidden="true">✦</div>
+          <div>
+            <p class="section-kicker">WAVE COMPLETE</p>
+            <h2 id="review-title">第 1 波完成</h2>
+            <p id="review-summary">本波回顾 · 15 个词</p>
+          </div>
+          <span class="review-badge">词汇回顾</span>
+        </header>
+        <div class="review-content">
+          <section aria-labelledby="review-pairs-title">
+            <h3 id="review-pairs-title">同义词组合</h3>
+            <div class="review-pairs" id="review-pairs"></div>
+          </section>
+          <section aria-labelledby="review-extras-title">
+            <h3 id="review-extras-title">本组其他词</h3>
+            <div class="review-extras" id="review-extras"></div>
+          </section>
+        </div>
+        <footer class="review-footer">
+          <p>停留复习不计时，准备好后再继续。</p>
+          <button class="review-continue" id="review-continue" type="button">下一波 <span aria-hidden="true">→</span></button>
+        </footer>
+      </section>
+    </div>
+
     <div class="result-backdrop" id="result-modal" hidden>
       <section class="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
         <div class="result-spark" aria-hidden="true">✦</div>
@@ -106,6 +142,6 @@
     </div>
 
     <div class="toast-layer" id="toast-layer" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./ui.js"></script>
+    <script type="module" src="./ui.js?v=7"></script>
   </body>
 </html>
