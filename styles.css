@@ -81,7 +81,7 @@ button { font: inherit; }
 .game-frame {
   position: relative;
   z-index: 1;
-  width: min(1100px, 100%);
+  width: min(1240px, 100%);
   margin: 0 auto;
   padding: clamp(22px, 4vw, 42px);
   border: 1px solid rgba(255, 255, 255, 0.75);
@@ -138,6 +138,17 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
 .change-book-button:hover { border-color: var(--teal); background: #fff; }
 .change-book-button:focus-visible { outline: 3px solid rgba(245,123,93,0.42); outline-offset: 2px; }
 .note-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--mint); box-shadow: 0 0 0 5px rgba(95, 212, 164, 0.16); }
+
+.game-body { display: grid; grid-template-areas: "game book-progress"; grid-template-columns: minmax(0, 1fr) 178px; align-items: start; gap: 20px; }
+.game-column { grid-area: game; min-width: 0; }
+.book-progress-panel { grid-area: book-progress; display: grid; gap: 18px; padding: 8px 0 8px 18px; border-left: 1px solid rgba(16, 127, 134, 0.18); }
+.book-progress-title { color: var(--teal-dark); font-size: 11px; font-weight: 900; }
+.book-progress-item { display: grid; gap: 8px; }
+.book-progress-item > div:first-child { display: grid; gap: 4px; }
+.book-progress-item span { color: var(--ink-soft); font-size: 10px; font-weight: 750; }
+.book-progress-item strong { color: var(--ink); font-size: 16px; font-variant-numeric: tabular-nums; }
+.book-progress-track { overflow: hidden; height: 5px; border-radius: 99px; background: #d9e6e3; }
+.book-progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--teal), var(--mint)); transition: width 0.35s ease; }
 
 .hud {
   gap: 14px;
@@ -312,9 +323,11 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
 .setup-error { padding: 9px 11px; border: 1px solid rgba(189,85,63,0.26); border-radius: 8px; color: var(--coral-dark); background: #fff0eb; font-size: 11px; font-weight: 750; }
 
 .review-backdrop,
-.result-backdrop { position: fixed; inset: 0; z-index: 9; display: grid; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); place-items: center; background: rgba(7, 47, 55, 0.62); backdrop-filter: blur(10px); }
+.result-backdrop,
+.reset-backdrop { position: fixed; inset: 0; z-index: 9; display: grid; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); place-items: center; background: rgba(7, 47, 55, 0.62); backdrop-filter: blur(10px); }
 .review-backdrop[hidden],
-.result-backdrop[hidden] { display: none; }
+.result-backdrop[hidden],
+.reset-backdrop[hidden] { display: none; }
 .review-modal { display: grid; width: min(780px, 100%); max-height: min(92dvh, 880px); grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid rgba(255,255,255,0.78); border-radius: 18px; background: var(--paper); box-shadow: 0 30px 90px rgba(8, 48, 56, 0.36); animation: modal-rise 0.35s ease-out; }
 .review-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 21px 24px 18px; color: var(--ink); background: linear-gradient(115deg, #d9fff2, #cdeff2); border-bottom: 1px solid rgba(16,127,134,0.12); }
 .review-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 12px; color: var(--coral); background: #fff2c7; font-size: 23px; }
@@ -348,6 +361,17 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
 .result-stats strong { display: block; margin-top: 4px; color: var(--teal-dark); font-size: 24px; font-variant-numeric: tabular-nums; }
 .modal-button { width: 100%; min-height: 48px; color: #fff; background: var(--teal); box-shadow: 0 10px 16px rgba(16, 127, 134, 0.2); }
 
+.reset-modal { width: min(430px, 100%); padding: 30px; border: 1px solid rgba(255,255,255,0.76); border-radius: 20px; text-align: center; background: var(--paper); box-shadow: 0 30px 90px rgba(10, 60, 70, 0.3); animation: modal-rise 0.25s ease-out; }
+.reset-icon { display: grid; width: 50px; height: 50px; margin: 0 auto 16px; place-items: center; border-radius: 14px; color: var(--coral-dark); background: #fff0eb; font-size: 24px; font-weight: 900; }
+.reset-modal h2 { margin-top: 8px; font-size: 23px; }
+.reset-modal .reset-copy { margin-top: 10px; color: var(--ink-soft); font-size: 12px; line-height: 1.6; }
+.reset-modal .reset-error { padding: 8px 10px; border: 1px solid rgba(189,85,63,0.25); border-radius: 8px; color: var(--coral-dark); background: #fff0eb; font-size: 10px; font-weight: 750; }
+.reset-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 22px; }
+.reset-actions button { min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 850; cursor: pointer; }
+.reset-cancel { border: 1px solid rgba(16,127,134,0.2); color: var(--teal-dark); background: #fff; }
+.reset-confirm { border: 0; color: #fff; background: var(--coral); box-shadow: 0 8px 14px rgba(245,123,93,0.22); }
+.reset-actions button:focus-visible { outline: 3px solid rgba(255,209,92,0.7); outline-offset: 2px; }
+
 .toast-layer { position: fixed; right: 18px; bottom: 18px; z-index: 8; display: grid; gap: 8px; pointer-events: none; }
 .toast { padding: 11px 14px; border: 1px solid rgba(255,255,255,0.6); border-radius: 12px; color: var(--ink); font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.92); box-shadow: 0 10px 22px rgba(23,70,78,0.16); animation: toast-in 0.2s ease-out forwards, toast-out 0.25s ease-in 1.9s forwards; }
 
@@ -369,6 +393,14 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   .tile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+@media (max-width: 1100px) {
+  .game-body { grid-template-areas: "book-progress" "game"; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .book-progress-panel { grid-template-columns: auto repeat(2, minmax(0, 1fr)); align-items: center; gap: 14px; padding: 9px 12px; border: 0; border-top: 1px solid rgba(16, 127, 134, 0.14); border-bottom: 1px solid rgba(16, 127, 134, 0.14); }
+  .book-progress-title { white-space: nowrap; }
+  .book-progress-item { grid-template-columns: minmax(110px, auto) minmax(60px, 1fr); align-items: center; gap: 10px; }
+  .book-progress-item > div:first-child { grid-template-columns: auto auto; align-items: baseline; justify-content: space-between; gap: 8px; }
+}
+
 @media (max-width: 680px) {
   .page-shell { padding: max(6px, env(safe-area-inset-top)) 6px max(10px, env(safe-area-inset-bottom)); }
   .game-frame { padding: 11px 9px 10px; border-radius: 16px; }
@@ -381,6 +413,14 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   .vocabulary-chip { max-width: 128px; justify-content: flex-end; text-align: right; font-size: 9px; line-height: 1.25; }
   .note-dot { width: 6px; height: 6px; box-shadow: 0 0 0 3px rgba(95, 212, 164, 0.16); }
   .change-book-button { min-height: 28px; padding: 0 7px; border-radius: 7px; font-size: 9px; }
+  .game-body { gap: 7px; }
+  .book-progress-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 6px 3px; }
+  .book-progress-title { display: none; }
+  .book-progress-item { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .book-progress-item > div:first-child { display: flex; gap: 5px; }
+  .book-progress-item span { font-size: 8px; }
+  .book-progress-item strong { font-size: 10px; }
+  .book-progress-track { height: 4px; }
   .hud { display: grid; grid-template-columns: 0.8fr 0.8fr 1.4fr; gap: 4px; padding: 6px; border-radius: 11px; }
   .hud-stat { min-width: 0; padding: 2px 5px; }
   .hud-stat strong { margin-top: 2px; font-size: 13px; }

@@ -2,6 +2,7 @@ import {
   GAME_CONSTANTS,
   completePendingMatch,
   createGameState,
+  getChallengeProgress,
   getTilePresentation,
   getWaveReview,
   restartGame,
@@ -9,11 +10,17 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=11';
+} from './game.js?v=13';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
-} from './vocabulary.js?v=11';
+} from './vocabulary.js?v=13';
+import {
+  clearChallengeProgress,
+  getChallengeProgressSelection,
+  loadChallengeProgress,
+  saveChallengeProgress,
+} from './challenge-progress.js?v=13';
 
 const MATCH_ANIMATION_MS = 1_800;
 const WAVE_CLEAR_MS = 650;
@@ -27,6 +34,10 @@ const timerFill = document.querySelector('#timer-fill');
 const timerCard = document.querySelector('#timer-card');
 const progressEl = document.querySelector('#progress');
 const progressFill = document.querySelector('#progress-fill');
+const bookPairProgress = document.querySelector('#book-pair-progress');
+const bookPairFill = document.querySelector('#book-pair-fill');
+const bookChallengeProgress = document.querySelector('#book-challenge-progress');
+const bookChallengeFill = document.querySelector('#book-challenge-fill');
 const comboEl = document.querySelector('#combo');
 const comboChip = document.querySelector('#combo-chip');
 const statusLine = document.querySelector('#status-line');
@@ -47,6 +58,7 @@ const resultModal = document.querySelector('#result-modal');
 const finalScore = document.querySelector('#final-score');
 const finalAccuracy = document.querySelector('#final-accuracy');
 const resultMessage = document.querySelector('#result-message');
+const resultTitle = document.querySelector('#result-title');
 const modalRestart = document.querySelector('#modal-restart');
 const toastLayer = document.querySelector('#toast-layer');
 const gameFrame = document.querySelector('.game-frame');
@@ -60,6 +72,10 @@ const startGameButton = document.querySelector('#start-game-button');
 const setupError = document.querySelector('#setup-error');
 const frequentCount = document.querySelector('#frequent-count');
 const fullCount = document.querySelector('#full-count');
+const resetModal = document.querySelector('#reset-modal');
+const resetCancel = document.querySelector('#reset-cancel');
+const resetConfirm = document.querySelector('#reset-confirm');
+const resetError = document.querySelector('#reset-error');
 
 let state = createGameState(Date.now());
 let catalog = null;
@@ -69,6 +85,7 @@ let waveClearTimeout = null;
 let hintTimeout = null;
 let soundOn = true;
 let reviewOpen = false;
+let activeChallengeLoaded = false;
 let audioContext = null;
 
 const SETTINGS_KEY = 'synonym-match-vocabulary-v1';
@@ -80,7 +97,7 @@ const getStatusCopy = (currentState) => {
   if (currentState.status === 'resolving') return '配对成功，记住刚刚出现的中文释义';
   if (currentState.status === 'wave-cleared') return '本组完成，正在整理词汇回顾';
   if (currentState.status === 'wave-expired') return '时间到，先把刚才的词读一遍';
-  if (currentState.status === 'complete') return '三波挑战完成，看看你的最终成绩';
+  if (currentState.status === 'complete') return '整本词书挑战完成，看看你的最终成绩';
   if (currentState.lastResult === 'match') return '配对成功！继续保持连击';
   if (currentState.lastResult === 'miss') return '意思不太一样，再试试别的组合';
   if (currentState.lastResult === 'unpairable') return '这个词没有同义词搭档，换一个试试';
@@ -192,9 +209,11 @@ const renderReview = () => {
   if (!visible) return;
 
   const review = getWaveReview(state);
-  reviewTitle.textContent = `第 ${state.wave} 波完成`;
-  reviewSummary.textContent = `本波回顾 · ${review.pairs.length} 组同义词 · ${review.totalWords} 个词`;
-  reviewContinue.firstChild.textContent = state.wave < state.totalWaves ? '下一波 ' : '查看总成绩 ';
+  const challengeProgress = getChallengeProgress(state);
+  const bookComplete = challengeProgress.completedPairs === challengeProgress.totalPairs;
+  reviewTitle.textContent = `第 ${state.wave} 局完成`;
+  reviewSummary.textContent = `本局回顾 · ${review.pairs.length} 组同义词 · ${review.totalWords} 个词`;
+  reviewContinue.firstChild.textContent = bookComplete ? '查看总成绩 ' : '下一局 ';
 
   const pairFragment = document.createDocumentFragment();
   for (const pair of review.pairs) {
@@ -221,26 +240,39 @@ const renderResult = () => {
   if (!visible) return;
 
   const accuracy = state.attempts ? Math.round((state.correctMatches / state.attempts) * 100) : 0;
+  resultTitle.textContent = state.status === 'wave-expired' ? '时间到，进度已经保存' : '这本词书，挑战完成';
   finalScore.textContent = formatScore(state.score);
   finalAccuracy.textContent = `${accuracy}%`;
   resultMessage.textContent = state.status === 'wave-expired'
-    ? '时间管理也是考研的一部分，复盘后再来一次。'
+    ? '重新开始本局时，已经消除的词对不会丢失。'
     : accuracy >= 80
-      ? '词感在线，下一组继续冲刺。'
-      : '把错题再读一遍，你会更稳。';
+      ? '词感在线，可以开始下一本词书了。'
+      : '整本词书已经完成，可以开始下一本了。';
+  modalRestart.firstChild.textContent = state.status === 'complete' ? '选择新词书 ' : '继续挑战 ';
 };
 
 const render = () => {
   const matchedCount = state.matchedPairIds.length;
   const progress = (matchedCount / GAME_CONSTANTS.PAIRS_PER_WAVE) * 100;
   const timeProgress = (state.timeLeft / GAME_CONSTANTS.ROUND_SECONDS) * 100;
+  const challengeProgress = getChallengeProgress(state);
+  const pairProgress = challengeProgress.totalPairs
+    ? (challengeProgress.completedPairs / challengeProgress.totalPairs) * 100
+    : 0;
+  const completedChallengeProgress = challengeProgress.totalChallenges
+    ? (challengeProgress.completedChallenges / challengeProgress.totalChallenges) * 100
+    : 0;
   scoreEl.textContent = formatScore(state.score);
-  waveEl.textContent = `第 ${state.wave} / ${state.totalWaves} 波`;
+  waveEl.textContent = `第 ${state.wave} / ${state.totalWaves} 局`;
   timerEl.textContent = String(state.timeLeft).padStart(2, '0');
   timerFill.style.width = `${timeProgress}%`;
   timerCard.classList.toggle('is-warning', state.timeLeft <= 12 && state.status === 'playing');
-  progressEl.textContent = `已配对 ${matchedCount} / ${GAME_CONSTANTS.PAIRS_PER_WAVE}`;
+  progressEl.textContent = `本局已配对 ${matchedCount} / ${GAME_CONSTANTS.PAIRS_PER_WAVE}`;
   progressFill.style.width = `${progress}%`;
+  bookPairProgress.textContent = `${numberFormatter.format(challengeProgress.completedPairs)} / ${numberFormatter.format(challengeProgress.totalPairs)}`;
+  bookPairFill.style.width = `${pairProgress}%`;
+  bookChallengeProgress.textContent = `${numberFormatter.format(challengeProgress.completedChallenges)} / ${numberFormatter.format(challengeProgress.totalChallenges)}`;
+  bookChallengeFill.style.width = `${completedChallengeProgress}%`;
   comboEl.textContent = `连击 ${state.combo}`;
   comboChip.dataset.active = String(state.combo > 0);
   currentVocabulary.textContent = `${state.vocabularyLabel} · ${numberFormatter.format(state.vocabularyWordCount)} 词`;
@@ -260,6 +292,30 @@ const stopTimer = () => {
   if (timerId !== null) {
     window.clearInterval(timerId);
     timerId = null;
+  }
+};
+
+const persistActiveChallenge = () => {
+  if (!activeChallengeLoaded) return;
+  try {
+    if (state.status === 'complete') {
+      clearChallengeProgress(window.localStorage);
+      activeChallengeLoaded = false;
+      return;
+    }
+    saveChallengeProgress(window.localStorage, state);
+  } catch {
+    showToast('浏览器无法保存挑战进度', 'neutral');
+  }
+};
+
+const clearActiveChallenge = () => {
+  try {
+    clearChallengeProgress(window.localStorage);
+    activeChallengeLoaded = false;
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -284,6 +340,7 @@ const scheduleMatchResolution = () => {
   if (matchTimeout !== null) window.clearTimeout(matchTimeout);
   matchTimeout = window.setTimeout(() => {
     state = completePendingMatch(state);
+    persistActiveChallenge();
     render();
     if (state.status === 'playing') {
       startTimer();
@@ -313,6 +370,7 @@ const handleHint = () => {
   const nextState = useHint(state);
   if (nextState === state) return;
   state = nextState;
+  persistActiveChallenge();
   render();
   const unpairable = state.lastResult === 'unpairable';
   playTone(unpairable ? 'miss' : 'hint');
@@ -340,6 +398,7 @@ const handleRestart = () => {
   clearScheduledWork();
   reviewOpen = false;
   state = restartGame(state);
+  persistActiveChallenge();
   render();
   startTimer();
 };
@@ -347,6 +406,7 @@ const handleRestart = () => {
 const handleContinue = () => {
   reviewOpen = false;
   state = startNextWave(state);
+  persistActiveChallenge();
   render();
   if (state.status === 'playing') startTimer();
 };
@@ -410,6 +470,8 @@ const handleStartGame = async (event) => {
     clearScheduledWork();
     reviewOpen = false;
     state = createGameState(Date.now(), 1, 0, vocabulary);
+    activeChallengeLoaded = true;
+    persistActiveChallenge();
     window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ bookId, scope }));
     setSetupOpen(false);
     render();
@@ -424,12 +486,69 @@ const handleStartGame = async (event) => {
 };
 
 const handleChangeBook = () => {
+  stopTimer();
+  resetError.hidden = true;
+  resetModal.hidden = false;
+  gameFrame.inert = true;
+  resetCancel.focus();
+};
+
+const handleCancelReset = () => {
+  resetModal.hidden = true;
+  gameFrame.inert = false;
+  changeBookButton.focus();
+  startTimer();
+};
+
+const handleConfirmReset = () => {
+  if (!clearActiveChallenge()) {
+    resetError.hidden = false;
+    return;
+  }
   clearScheduledWork();
   reviewOpen = false;
   reviewModal.hidden = true;
   resultModal.hidden = true;
+  resetModal.hidden = true;
   updateSetupCounts();
   setSetupOpen(true);
+};
+
+const handleResultAction = () => {
+  if (state.status !== 'complete') {
+    handleRestart();
+    return;
+  }
+  resultModal.hidden = true;
+  updateSetupCounts();
+  setSetupOpen(true);
+};
+
+const restoreActiveChallenge = async () => {
+  const selection = getChallengeProgressSelection(window.localStorage);
+  if (!selection || !catalog.books[selection.bookId]?.scopes[selection.scope]) return false;
+  const vocabulary = await loadVocabulary(catalog, selection.bookId, selection.scope);
+  const saved = loadChallengeProgress(window.localStorage, vocabulary);
+  if (!saved) {
+    clearActiveChallenge();
+    return false;
+  }
+
+  const completedChallenges = Math.floor(saved.completedPairIds.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
+  const totalChallenges = Math.ceil(vocabulary.pairs.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
+  const wave = Math.min(totalChallenges, completedChallenges + 1);
+  state = createGameState(saved.seed, wave, saved.score, vocabulary, saved.completedPairIds, {
+    correctMatches: saved.correctMatches,
+    attempts: saved.attempts,
+  });
+  setupForm.elements.book.value = saved.bookId;
+  setupForm.elements.scope.value = saved.scope;
+  activeChallengeLoaded = true;
+  setSetupOpen(false);
+  render();
+  startTimer();
+  showToast('已恢复上次挑战进度');
+  return true;
 };
 
 const initializeVocabularySetup = async () => {
@@ -440,6 +559,7 @@ const initializeVocabularySetup = async () => {
     updateSetupCounts();
     setupError.hidden = true;
     startGameButton.disabled = false;
+    await restoreActiveChallenge();
   } catch (error) {
     setupError.textContent = error instanceof Error ? error.message : '词库目录加载失败，请刷新重试。';
     setupError.hidden = false;
@@ -449,10 +569,12 @@ const initializeVocabularySetup = async () => {
 board.addEventListener('click', handleTileClick);
 hintButton.addEventListener('click', handleHint);
 restartButton.addEventListener('click', handleRestart);
-modalRestart.addEventListener('click', handleRestart);
+modalRestart.addEventListener('click', handleResultAction);
 reviewContinue.addEventListener('click', handleContinue);
 soundButton.addEventListener('click', handleSound);
 changeBookButton.addEventListener('click', handleChangeBook);
+resetCancel.addEventListener('click', handleCancelReset);
+resetConfirm.addEventListener('click', handleConfirmReset);
 setupForm.addEventListener('change', updateSetupCounts);
 setupForm.addEventListener('submit', handleStartGame);
 

@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   completePendingMatch,
   createGameState,
+  getChallengeProgress,
   getPerformanceRating,
   getTilePresentation,
   getWaveReview,
@@ -53,6 +55,102 @@ test('creates every tile from the selected vocabulary book', () => {
   assert.equal(state.tiles.every((tile) => tile.word.startsWith('ielts-word-')), true);
 });
 
+test('derives the total challenge count from the selected vocabulary', () => {
+  const state = createGameState(7, 1, 0, TEST_VOCABULARY);
+
+  assert.equal(state.totalWaves, 2);
+  assert.deepEqual(getChallengeProgress(state), {
+    completedPairs: 0,
+    totalPairs: 7,
+    completedChallenges: 0,
+    totalChallenges: 2,
+  });
+});
+
+test('new challenges exclude completed pairs from book progress', () => {
+  const completedPairIds = ['ielts-pair-1', 'ielts-pair-2'];
+  const state = createGameState(7, 1, 0, TEST_VOCABULARY, completedPairIds);
+  const progressPairIds = new Set(
+    state.tiles
+      .filter((tile) => !tile.distractor && tile.countsForBookProgress)
+      .map((tile) => tile.pairId),
+  );
+
+  assert.equal(progressPairIds.has('ielts-pair-1'), false);
+  assert.equal(progressPairIds.has('ielts-pair-2'), false);
+  assert.equal(progressPairIds.size, 4);
+});
+
+test('resuming a partial challenge only adds enough new pairs to reach the next group of six', () => {
+  const completedPairIds = TEST_VOCABULARY.pairs.slice(0, 5).map((pair) => pair.pairId);
+  const state = createGameState(7, 1, 0, TEST_VOCABULARY, completedPairIds);
+  const progressPairIds = new Set(
+    state.tiles
+      .filter((tile) => !tile.distractor && tile.countsForBookProgress)
+      .map((tile) => tile.pairId),
+  );
+  const fillerPairIds = new Set(
+    state.tiles
+      .filter((tile) => !tile.distractor && !tile.countsForBookProgress)
+      .map((tile) => tile.pairId),
+  );
+
+  assert.equal(progressPairIds.size, 1);
+  assert.equal(fillerPairIds.size, 5);
+});
+
+test('starting after exactly six completed pairs still creates fifteen tiles', async () => {
+  const vocabulary = JSON.parse(await readFile(new URL('./data/cet4-frequent.json', import.meta.url), 'utf8'));
+  const firstChallenge = createGameState(7, 1, 0, vocabulary);
+  const completedPairIds = [...new Set(
+    firstChallenge.tiles.filter((tile) => tile.countsForBookProgress).map((tile) => tile.pairId),
+  )];
+  const state = createGameState(8, 2, 0, vocabulary, completedPairIds);
+
+  assert.equal(state.tiles.length, 15);
+  assert.equal(state.tiles.filter((tile) => !tile.distractor).length, 12);
+});
+
+test('a challenge never renders the same English word in two different pair tiles', async () => {
+  const vocabulary = JSON.parse(await readFile(new URL('./data/cet4-frequent.json', import.meta.url), 'utf8'));
+  const state = createGameState(2, 1, 0, vocabulary);
+  const words = state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.word);
+
+  assert.equal(new Set(words).size, words.length);
+});
+
+test('the final challenge is padded to fifteen tiles without counting filler pairs twice', () => {
+  const completedPairIds = TEST_VOCABULARY.pairs.slice(0, 6).map((pair) => pair.pairId);
+  const state = createGameState(7, 2, 0, TEST_VOCABULARY, completedPairIds);
+  const filler = state.tiles.find((tile) => !tile.distractor && !tile.countsForBookProgress);
+  const fillerTiles = state.tiles.filter((tile) => tile.pairId === filler.pairId);
+  const selected = selectTile(state, fillerTiles[0].id, 1_000);
+  const resolving = selectTile(selected, fillerTiles[1].id, 1_500);
+  const matched = completePendingMatch(resolving);
+
+  assert.equal(state.tiles.length, 15);
+  assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 6);
+  assert.deepEqual(matched.completedBookPairIds, completedPairIds);
+});
+
+test('matching a new pair updates book-wide progress and completion totals', () => {
+  const completedPairIds = TEST_VOCABULARY.pairs.slice(0, 6).map((pair) => pair.pairId);
+  const state = createGameState(7, 2, 0, TEST_VOCABULARY, completedPairIds);
+  const newTile = state.tiles.find((tile) => tile.countsForBookProgress);
+  const pairTiles = state.tiles.filter((tile) => tile.pairId === newTile.pairId);
+  const selected = selectTile(state, pairTiles[0].id, 1_000);
+  const resolving = selectTile(selected, pairTiles[1].id, 1_500);
+  const matched = completePendingMatch(resolving);
+
+  assert.equal(matched.completedBookPairIds.length, 7);
+  assert.deepEqual(getChallengeProgress(matched), {
+    completedPairs: 7,
+    totalPairs: 7,
+    completedChallenges: 2,
+    totalChallenges: 2,
+  });
+});
+
 test('keeps the selected vocabulary through the next wave and restart', () => {
   const state = createGameState(7, 1, 80, TEST_VOCABULARY);
   const cleared = {
@@ -70,6 +168,16 @@ test('keeps the selected vocabulary through the next wave and restart', () => {
   assert.equal(restarted.bookId, 'ielts');
   assert.equal(restarted.scope, 'full');
   assert.equal(restarted.tiles.every((tile) => tile.word.startsWith('ielts-word-')), true);
+});
+
+test('restores whole-book accuracy counters when creating a resumed challenge', () => {
+  const state = createGameState(7, 1, 80, TEST_VOCABULARY, ['ielts-pair-1'], {
+    correctMatches: 4,
+    attempts: 6,
+  });
+
+  assert.equal(state.correctMatches, 4);
+  assert.equal(state.attempts, 6);
 });
 
 test('a round starts with sixty seconds and expires at zero', () => {

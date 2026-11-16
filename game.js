@@ -1,5 +1,4 @@
 const ROUND_SECONDS = 60;
-const TOTAL_WAVES = 3;
 const TILES_PER_WAVE = 15;
 const PAIRS_PER_WAVE = 6;
 const DISTRACTORS_PER_WAVE = TILES_PER_WAVE - PAIRS_PER_WAVE * 2;
@@ -103,6 +102,7 @@ const clone = (state, changes = {}) => ({
   ...changes,
   tiles: changes.tiles ?? state.tiles.map((tile) => ({ ...tile })),
   matchedPairIds: changes.matchedPairIds ?? [...state.matchedPairIds],
+  completedBookPairIds: changes.completedBookPairIds ?? [...state.completedBookPairIds],
   wrongTileIds: changes.wrongTileIds ?? [...state.wrongTileIds],
 });
 
@@ -125,22 +125,77 @@ const shuffle = (items, seed) => {
   return output;
 };
 
-const pickPairs = (wave, seed, vocabulary) => {
-  const start = ((wave - 1) * PAIRS_PER_WAVE) % vocabulary.pairs.length;
-  const ordered = Array.from({ length: vocabulary.pairs.length }, (_, offset) =>
-    vocabulary.pairs[(start + offset) % vocabulary.pairs.length],
-  );
-  return shuffle(ordered, seed).slice(0, PAIRS_PER_WAVE);
+const selectUniqueWordPairs = (candidates, limit, seed, usedWords) => {
+  if (limit <= 0) return [];
+  const selected = [];
+  for (const pair of shuffle(candidates, seed)) {
+    if (pair.words.some((word) => usedWords.has(word))) continue;
+    selected.push(pair);
+    pair.words.forEach((word) => usedWords.add(word));
+    if (selected.length === limit) break;
+  }
+  return selected;
 };
 
-const buildTiles = (wave, seed, vocabulary) => {
-  const selectedPairs = pickPairs(wave, seed, vocabulary);
+const assemblePairSelection = (progressCandidates, fillerCandidates, progressLimit, seed) => {
+  const fillerLimit = PAIRS_PER_WAVE - progressLimit;
+  let best = { progressPairs: [], fillerPairs: [] };
+
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const usedWords = new Set();
+    const fillerFirst = attempt % 2 === 0;
+    let progressPairs;
+    let fillerPairs;
+
+    if (fillerFirst) {
+      fillerPairs = selectUniqueWordPairs(fillerCandidates, fillerLimit, seed + attempt * 37, usedWords);
+      progressPairs = selectUniqueWordPairs(progressCandidates, progressLimit, seed + attempt * 53 + 1, usedWords);
+    } else {
+      progressPairs = selectUniqueWordPairs(progressCandidates, progressLimit, seed + attempt * 53, usedWords);
+      fillerPairs = selectUniqueWordPairs(fillerCandidates, fillerLimit, seed + attempt * 37 + 1, usedWords);
+    }
+
+    if (progressPairs.length + fillerPairs.length > best.progressPairs.length + best.fillerPairs.length) {
+      best = { progressPairs, fillerPairs };
+    }
+    if (progressPairs.length === progressLimit && fillerPairs.length === fillerLimit) {
+      return { progressPairs, fillerPairs };
+    }
+  }
+
+  return best;
+};
+
+const pickPairs = (seed, vocabulary, completedBookPairIds) => {
+  const completedIds = new Set(completedBookPairIds);
+  const progressCandidates = vocabulary.pairs.filter((pair) => !completedIds.has(pair.pairId));
+  const fillerCandidates = vocabulary.pairs.filter((pair) => completedIds.has(pair.pairId));
+  const partialChallengePairs = completedIds.size % PAIRS_PER_WAVE;
+  const openProgressSlots = partialChallengePairs === 0
+    ? PAIRS_PER_WAVE
+    : PAIRS_PER_WAVE - partialChallengePairs;
+  const progressLimit = Math.min(openProgressSlots, progressCandidates.length);
+  const { progressPairs, fillerPairs } = assemblePairSelection(
+    progressCandidates,
+    fillerCandidates,
+    progressLimit,
+    seed,
+  );
+  return [
+    ...progressPairs.map((pair) => ({ ...pair, countsForBookProgress: true })),
+    ...fillerPairs.map((pair) => ({ ...pair, countsForBookProgress: false })),
+  ];
+};
+
+const buildTiles = (wave, seed, vocabulary, completedBookPairIds) => {
+  const selectedPairs = pickPairs(seed, vocabulary, completedBookPairIds);
   const pairedTiles = selectedPairs.flatMap((pair) =>
     pair.words.map((word, variant) => ({
       id: `${pair.pairId}-${variant}`,
       ...getWordEntry(word, vocabulary),
       pairId: pair.pairId,
       distractor: false,
+      countsForBookProgress: pair.countsForBookProgress,
     })),
   );
   const usedWords = new Set(pairedTiles.map((tile) => tile.word));
@@ -152,6 +207,7 @@ const buildTiles = (wave, seed, vocabulary) => {
       ...getWordEntry(word, vocabulary),
       pairId: `distractor-${wave}-${index}`,
       distractor: true,
+      countsForBookProgress: false,
     }));
 
   return shuffle([...pairedTiles, ...distractors], seed + 31);
@@ -163,30 +219,57 @@ export const getPerformanceRating = (durationMs) => {
   return { label: 'GOOD', bonus: 40 };
 };
 
-export const createGameState = (seed = Date.now(), wave = 1, score = 0, vocabulary = DEFAULT_VOCABULARY) => ({
-  seed,
-  wave,
-  totalWaves: TOTAL_WAVES,
-  vocabulary,
-  bookId: vocabulary.bookId,
-  scope: vocabulary.scope,
-  vocabularyLabel: vocabulary.label,
-  vocabularyWordCount: vocabulary.totalWords,
-  tiles: buildTiles(wave, seed, vocabulary),
-  matchedPairIds: [],
-  selectedTileId: null,
-  selectedAtMs: null,
-  pendingMatch: null,
-  hintTileId: null,
-  wrongTileIds: [],
-  lastResult: null,
-  score,
-  combo: 0,
-  correctMatches: 0,
-  attempts: 0,
-  timeLeft: ROUND_SECONDS,
-  status: 'playing',
-});
+export const createGameState = (
+  seed = Date.now(),
+  wave = 1,
+  score = 0,
+  vocabulary = DEFAULT_VOCABULARY,
+  completedBookPairIds = [],
+  sessionStats = {},
+) => {
+  const validPairIds = new Set(vocabulary.pairs.map((pair) => pair.pairId));
+  const normalizedCompletedIds = [...new Set(completedBookPairIds)].filter((pairId) => validPairIds.has(pairId));
+  const totalWaves = Math.ceil(vocabulary.pairs.length / PAIRS_PER_WAVE);
+  return {
+    seed,
+    wave,
+    totalWaves,
+    vocabulary,
+    bookId: vocabulary.bookId,
+    scope: vocabulary.scope,
+    vocabularyLabel: vocabulary.label,
+    vocabularyWordCount: vocabulary.totalWords,
+    tiles: buildTiles(wave, seed, vocabulary, normalizedCompletedIds),
+    matchedPairIds: [],
+    completedBookPairIds: normalizedCompletedIds,
+    selectedTileId: null,
+    selectedAtMs: null,
+    pendingMatch: null,
+    hintTileId: null,
+    wrongTileIds: [],
+    lastResult: null,
+    score,
+    combo: 0,
+    correctMatches: Math.max(0, sessionStats.correctMatches ?? 0),
+    attempts: Math.max(0, sessionStats.attempts ?? 0),
+    timeLeft: ROUND_SECONDS,
+    status: normalizedCompletedIds.length >= vocabulary.pairs.length ? 'complete' : 'playing',
+  };
+};
+
+export const getChallengeProgress = (state) => {
+  const totalPairs = state.vocabulary.pairs.length;
+  const completedPairs = Math.min(totalPairs, new Set(state.completedBookPairIds).size);
+  const totalChallenges = Math.ceil(totalPairs / PAIRS_PER_WAVE);
+  return {
+    completedPairs,
+    totalPairs,
+    completedChallenges: completedPairs === totalPairs
+      ? totalChallenges
+      : Math.floor(completedPairs / PAIRS_PER_WAVE),
+    totalChallenges,
+  };
+};
 
 export const selectTile = (state, tileId, nowMs = Date.now()) => {
   if (state.status !== 'playing') return state;
@@ -252,8 +335,13 @@ export const selectTile = (state, tileId, nowMs = Date.now()) => {
 export const completePendingMatch = (state) => {
   if (state.status !== 'resolving' || !state.pendingMatch) return state;
   const matchedPairIds = [...state.matchedPairIds, state.pendingMatch.pairId];
+  const matchedTile = state.tiles.find((tile) => tile.pairId === state.pendingMatch.pairId);
+  const completedBookPairIds = matchedTile?.countsForBookProgress
+    ? [...new Set([...state.completedBookPairIds, state.pendingMatch.pairId])]
+    : state.completedBookPairIds;
   return clone(state, {
     matchedPairIds,
+    completedBookPairIds,
     pendingMatch: null,
     correctMatches: state.correctMatches + 1,
     status: matchedPairIds.length === PAIRS_PER_WAVE ? 'wave-cleared' : 'playing',
@@ -338,19 +426,35 @@ export const tick = (state, seconds = 1) => {
 
 export const startNextWave = (state) => {
   if (state.status !== 'wave-cleared') return state;
-  if (state.wave >= TOTAL_WAVES) return clone(state, { status: 'complete' });
+  const progress = getChallengeProgress(state);
+  if (progress.completedPairs >= progress.totalPairs) return clone(state, { status: 'complete' });
   return {
-    ...createGameState(state.seed + state.wave * 101, state.wave + 1, state.score, state.vocabulary),
-    correctMatches: state.correctMatches,
-    attempts: state.attempts,
+    ...createGameState(
+      state.seed + state.wave * 101,
+      state.wave + 1,
+      state.score,
+      state.vocabulary,
+      state.completedBookPairIds,
+      { correctMatches: state.correctMatches, attempts: state.attempts },
+    ),
   };
 };
 
-export const restartGame = (state) => createGameState(state.seed, 1, 0, state.vocabulary);
+export const restartGame = (state) => {
+  const progress = getChallengeProgress(state);
+  const wave = Math.min(progress.totalChallenges, progress.completedChallenges + 1);
+  return createGameState(
+    state.seed,
+    wave,
+    state.score,
+    state.vocabulary,
+    state.completedBookPairIds,
+    { correctMatches: state.correctMatches, attempts: state.attempts },
+  );
+};
 
 export const GAME_CONSTANTS = {
   ROUND_SECONDS,
-  TOTAL_WAVES,
   TILES_PER_WAVE,
   PAIRS_PER_WAVE,
   DISTRACTORS_PER_WAVE,
