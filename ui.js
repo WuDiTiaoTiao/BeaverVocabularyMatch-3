@@ -9,11 +9,11 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=10';
+} from './game.js?v=11';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
-} from './vocabulary.js?v=10';
+} from './vocabulary.js?v=11';
 
 const MATCH_ANIMATION_MS = 1_800;
 const WAVE_CLEAR_MS = 650;

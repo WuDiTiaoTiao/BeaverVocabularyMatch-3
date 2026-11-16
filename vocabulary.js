@@ -1,5 +1,5 @@
 const fetchJson = async (path, fetcher = globalThis.fetch) => {
-  const response = await fetcher(path, { cache: 'force-cache' });
+  const response = await fetcher(path, { cache: 'no-cache' });
   if (!response.ok) throw new Error(`词库加载失败（${response.status}）`);
   return response.json();
 };

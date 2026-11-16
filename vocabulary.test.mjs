@@ -73,6 +73,23 @@ test('resolves a selected book and scope to its offline vocabulary file', async 
   assert.throws(() => module.resolveVocabularyPath(catalog, 'ielts', 'unknown'), /未知词库范围/);
 });
 
+test('catalog loading revalidates instead of reusing a cached deployment error', async () => {
+  const { loadVocabularyCatalog } = await import('./vocabulary.js');
+  const fetcher = async (_path, options) => {
+    if (options.cache === 'force-cache') {
+      return { ok: false, status: 503 };
+    }
+    return {
+      ok: true,
+      json: async () => ({ books: { postgrad: { scopes: {} } } }),
+    };
+  };
+
+  const catalog = await loadVocabularyCatalog(fetcher);
+
+  assert.deepEqual(catalog, { books: { postgrad: { scopes: {} } } });
+});
+
 test('generated pairs exclude known antonyms and merely related words', async () => {
   const catalog = await readJson('./data/catalog.json');
   const forbiddenPairs = new Set([
