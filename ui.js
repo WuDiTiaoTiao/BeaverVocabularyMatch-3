@@ -9,7 +9,11 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=7';
+} from './game.js?v=10';
+import {
+  loadVocabulary,
+  loadVocabularyCatalog,
+} from './vocabulary.js?v=10';
 
 const MATCH_ANIMATION_MS = 1_800;
 const WAVE_CLEAR_MS = 650;
@@ -45,8 +49,20 @@ const finalAccuracy = document.querySelector('#final-accuracy');
 const resultMessage = document.querySelector('#result-message');
 const modalRestart = document.querySelector('#modal-restart');
 const toastLayer = document.querySelector('#toast-layer');
+const gameFrame = document.querySelector('.game-frame');
+const gameSubtitle = document.querySelector('#game-subtitle');
+const currentVocabulary = document.querySelector('#current-vocabulary');
+const footerCopy = document.querySelector('#footer-copy');
+const changeBookButton = document.querySelector('#change-book-button');
+const setupModal = document.querySelector('#setup-modal');
+const setupForm = document.querySelector('#setup-form');
+const startGameButton = document.querySelector('#start-game-button');
+const setupError = document.querySelector('#setup-error');
+const frequentCount = document.querySelector('#frequent-count');
+const fullCount = document.querySelector('#full-count');
 
 let state = createGameState(Date.now());
+let catalog = null;
 let timerId = null;
 let matchTimeout = null;
 let waveClearTimeout = null;
@@ -54,6 +70,9 @@ let hintTimeout = null;
 let soundOn = true;
 let reviewOpen = false;
 let audioContext = null;
+
+const SETTINGS_KEY = 'synonym-match-vocabulary-v1';
+const numberFormatter = new Intl.NumberFormat('zh-CN');
 
 const formatScore = (score) => String(score).padStart(4, '0');
 
@@ -224,6 +243,9 @@ const render = () => {
   progressFill.style.width = `${progress}%`;
   comboEl.textContent = `连击 ${state.combo}`;
   comboChip.dataset.active = String(state.combo > 0);
+  currentVocabulary.textContent = `${state.vocabularyLabel} · ${numberFormatter.format(state.vocabularyWordCount)} 词`;
+  gameSubtitle.textContent = `${state.vocabularyLabel}同义词配对挑战`;
+  footerCopy.textContent = `当前使用 ${state.vocabularyLabel}，每局 15 个词块。`;
   statusLine.textContent = getStatusCopy(state);
   hintButton.disabled = state.status !== 'playing' || state.hintTileId !== null || state.wrongTileIds.length > 0;
   board.setAttribute('aria-busy', String(state.status !== 'playing'));
@@ -336,12 +358,104 @@ const handleSound = () => {
   showToast(soundOn ? '音效已打开' : '音效已关闭');
 };
 
+const getSelectedSetup = () => ({
+  bookId: setupForm.elements.book.value,
+  scope: setupForm.elements.scope.value,
+});
+
+const updateSetupCounts = () => {
+  if (!catalog) return;
+  for (const element of document.querySelectorAll('[data-book-count]')) {
+    const book = catalog.books[element.dataset.bookCount];
+    element.textContent = `${numberFormatter.format(book.scopes.full.wordCount)} 词`;
+  }
+  const { bookId } = getSelectedSetup();
+  const selectedBook = catalog.books[bookId];
+  frequentCount.textContent = `${numberFormatter.format(selectedBook.scopes.frequent.wordCount)} 词 · 高频优先`;
+  fullCount.textContent = `${numberFormatter.format(selectedBook.scopes.full.wordCount)} 词 · 全量覆盖`;
+};
+
+const setSetupOpen = (open) => {
+  setupModal.hidden = !open;
+  gameFrame.inert = open;
+  if (open) {
+    stopTimer();
+    setupForm.querySelector('input:checked')?.focus();
+  }
+};
+
+const restoreSetupSelection = () => {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY));
+    if (catalog.books[saved.bookId]?.scopes[saved.scope]) {
+      setupForm.elements.book.value = saved.bookId;
+      setupForm.elements.scope.value = saved.scope;
+    }
+  } catch {
+    // Keep the checked defaults when storage is unavailable or invalid.
+  }
+};
+
+const handleStartGame = async (event) => {
+  event.preventDefault();
+  if (!catalog) return;
+  const { bookId, scope } = getSelectedSetup();
+  setupError.hidden = true;
+  startGameButton.disabled = true;
+  startGameButton.firstChild.textContent = '正在载入 ';
+
+  try {
+    const vocabulary = await loadVocabulary(catalog, bookId, scope);
+    stopTimer();
+    clearScheduledWork();
+    reviewOpen = false;
+    state = createGameState(Date.now(), 1, 0, vocabulary);
+    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ bookId, scope }));
+    setSetupOpen(false);
+    render();
+    startTimer();
+  } catch (error) {
+    setupError.textContent = error instanceof Error ? error.message : '词库加载失败，请稍后重试。';
+    setupError.hidden = false;
+  } finally {
+    startGameButton.disabled = false;
+    startGameButton.firstChild.textContent = '开始挑战 ';
+  }
+};
+
+const handleChangeBook = () => {
+  clearScheduledWork();
+  reviewOpen = false;
+  reviewModal.hidden = true;
+  resultModal.hidden = true;
+  updateSetupCounts();
+  setSetupOpen(true);
+};
+
+const initializeVocabularySetup = async () => {
+  startGameButton.disabled = true;
+  try {
+    catalog = await loadVocabularyCatalog();
+    restoreSetupSelection();
+    updateSetupCounts();
+    setupError.hidden = true;
+    startGameButton.disabled = false;
+  } catch (error) {
+    setupError.textContent = error instanceof Error ? error.message : '词库目录加载失败，请刷新重试。';
+    setupError.hidden = false;
+  }
+};
+
 board.addEventListener('click', handleTileClick);
 hintButton.addEventListener('click', handleHint);
 restartButton.addEventListener('click', handleRestart);
 modalRestart.addEventListener('click', handleRestart);
 reviewContinue.addEventListener('click', handleContinue);
 soundButton.addEventListener('click', handleSound);
+changeBookButton.addEventListener('click', handleChangeBook);
+setupForm.addEventListener('change', updateSetupCounts);
+setupForm.addEventListener('submit', handleStartGame);
 
 render();
-startTimer();
+setSetupOpen(true);
+initializeVocabularySetup();

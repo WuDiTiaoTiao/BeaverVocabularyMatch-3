@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#107f86" />
-    <title>词汇消消乐 · 考研英语同义词</title>
-    <link rel="stylesheet" href="./styles.css?v=7" />
+    <title>词汇消消乐 · 英语同义词</title>
+    <link rel="stylesheet" href="./styles.css?v=10" />
   </head>
   <body>
     <div class="page-shell" id="app">
@@ -17,14 +17,17 @@
           <div class="brand-lockup">
             <div class="brand-mark" aria-hidden="true">词</div>
             <div>
-              <p class="eyebrow">POSTGRAD ENGLISH · SYNONYM MATCH</p>
+              <p class="eyebrow">ENGLISH · SYNONYM MATCH</p>
               <h1>词汇消消乐</h1>
-              <p class="subtitle">考研英语同义词配对挑战</p>
+              <p class="subtitle" id="game-subtitle">英语考试同义词配对挑战</p>
             </div>
           </div>
-          <div class="header-note">
-            <span class="note-dot"></span>
-            <span>每局 15 个词块</span>
+          <div class="header-tools">
+            <div class="vocabulary-chip">
+              <span class="note-dot"></span>
+              <span id="current-vocabulary">等待选择词书</span>
+            </div>
+            <button class="change-book-button" id="change-book-button" type="button">更换词书</button>
           </div>
         </header>
 
@@ -94,9 +97,64 @@
               <span>重开</span>
             </button>
           </div>
-          <p class="footer-copy">每一组词都来自考研高频语境，配对后记得读一遍。</p>
+          <p class="footer-copy" id="footer-copy">每局 15 个词块，配对后记得读一遍。</p>
         </footer>
       </main>
+    </div>
+
+    <div class="setup-backdrop" id="setup-modal">
+      <section class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+        <header class="setup-header">
+          <div class="setup-mark" aria-hidden="true">词</div>
+          <div>
+            <p class="section-kicker">VOCABULARY SETUP</p>
+            <h2 id="setup-title">选择本局词书</h2>
+            <p>选好范围后，开始 60 秒同义词挑战</p>
+          </div>
+        </header>
+
+        <form id="setup-form">
+          <fieldset>
+            <legend>考试类型</legend>
+            <div class="book-options" id="book-options">
+              <label class="choice-option">
+                <input type="radio" name="book" value="ielts" />
+                <span><strong>雅思</strong><small data-book-count="ielts">读取中</small></span>
+              </label>
+              <label class="choice-option">
+                <input type="radio" name="book" value="cet6" />
+                <span><strong>六级</strong><small data-book-count="cet6">读取中</small></span>
+              </label>
+              <label class="choice-option">
+                <input type="radio" name="book" value="postgrad" checked />
+                <span><strong>考研</strong><small data-book-count="postgrad">读取中</small></span>
+              </label>
+              <label class="choice-option">
+                <input type="radio" name="book" value="cet4" />
+                <span><strong>四级</strong><small data-book-count="cet4">读取中</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>词库范围</legend>
+            <div class="scope-options">
+              <label class="scope-option">
+                <input type="radio" name="scope" value="frequent" checked />
+                <span><strong>高频词库</strong><small id="frequent-count">优先练习考试高频词</small></span>
+              </label>
+              <label class="scope-option">
+                <input type="radio" name="scope" value="full" />
+                <span><strong>完整词库</strong><small id="full-count">覆盖词书全部词汇</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <p class="setup-error" id="setup-error" role="alert" hidden></p>
+          <button class="start-game-button" id="start-game-button" type="submit">开始挑战 <span aria-hidden="true">→</span></button>
+          <p class="setup-source">词库数据来自 ECDICT，已离线内置于网站。</p>
+        </form>
+      </section>
     </div>
 
     <div class="review-backdrop" id="review-modal" hidden>
@@ -142,6 +200,6 @@
     </div>
 
     <div class="toast-layer" id="toast-layer" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./ui.js?v=7"></script>
+    <script type="module" src="./ui.js?v=10"></script>
   </body>
 </html>

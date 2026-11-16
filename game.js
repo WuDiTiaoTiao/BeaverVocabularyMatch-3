@@ -78,8 +78,18 @@ const DISTRACTORS = [
   'maintain',
 ];
 
-const getWordEntry = (word) => {
-  const details = WORD_DETAILS[word];
+const DEFAULT_VOCABULARY = {
+  bookId: 'postgrad',
+  scope: 'frequent',
+  label: '考研 · 高频词库',
+  totalWords: Object.keys(WORD_DETAILS).length,
+  entries: WORD_DETAILS,
+  pairs: SYNONYM_BANK,
+  distractors: DISTRACTORS,
+};
+
+const getWordEntry = (word, vocabulary) => {
+  const details = vocabulary.entries[word];
   return {
     word,
     phonetic: details.phonetic,
@@ -115,31 +125,31 @@ const shuffle = (items, seed) => {
   return output;
 };
 
-const pickPairs = (wave, seed) => {
-  const start = ((wave - 1) * PAIRS_PER_WAVE) % SYNONYM_BANK.length;
-  const ordered = Array.from({ length: SYNONYM_BANK.length }, (_, offset) =>
-    SYNONYM_BANK[(start + offset) % SYNONYM_BANK.length],
+const pickPairs = (wave, seed, vocabulary) => {
+  const start = ((wave - 1) * PAIRS_PER_WAVE) % vocabulary.pairs.length;
+  const ordered = Array.from({ length: vocabulary.pairs.length }, (_, offset) =>
+    vocabulary.pairs[(start + offset) % vocabulary.pairs.length],
   );
   return shuffle(ordered, seed).slice(0, PAIRS_PER_WAVE);
 };
 
-const buildTiles = (wave, seed) => {
-  const selectedPairs = pickPairs(wave, seed);
+const buildTiles = (wave, seed, vocabulary) => {
+  const selectedPairs = pickPairs(wave, seed, vocabulary);
   const pairedTiles = selectedPairs.flatMap((pair) =>
     pair.words.map((word, variant) => ({
       id: `${pair.pairId}-${variant}`,
-      ...getWordEntry(word),
+      ...getWordEntry(word, vocabulary),
       pairId: pair.pairId,
       distractor: false,
     })),
   );
   const usedWords = new Set(pairedTiles.map((tile) => tile.word));
-  const distractors = shuffle(DISTRACTORS, seed + 17)
+  const distractors = shuffle(vocabulary.distractors, seed + 17)
     .filter((word) => !usedWords.has(word))
     .slice(0, DISTRACTORS_PER_WAVE)
     .map((word, index) => ({
       id: `distractor-${wave}-${index}`,
-      ...getWordEntry(word),
+      ...getWordEntry(word, vocabulary),
       pairId: `distractor-${wave}-${index}`,
       distractor: true,
     }));
@@ -153,11 +163,16 @@ export const getPerformanceRating = (durationMs) => {
   return { label: 'GOOD', bonus: 40 };
 };
 
-export const createGameState = (seed = Date.now(), wave = 1, score = 0) => ({
+export const createGameState = (seed = Date.now(), wave = 1, score = 0, vocabulary = DEFAULT_VOCABULARY) => ({
   seed,
   wave,
   totalWaves: TOTAL_WAVES,
-  tiles: buildTiles(wave, seed),
+  vocabulary,
+  bookId: vocabulary.bookId,
+  scope: vocabulary.scope,
+  vocabularyLabel: vocabulary.label,
+  vocabularyWordCount: vocabulary.totalWords,
+  tiles: buildTiles(wave, seed, vocabulary),
   matchedPairIds: [],
   selectedTileId: null,
   selectedAtMs: null,
@@ -325,13 +340,13 @@ export const startNextWave = (state) => {
   if (state.status !== 'wave-cleared') return state;
   if (state.wave >= TOTAL_WAVES) return clone(state, { status: 'complete' });
   return {
-    ...createGameState(state.seed + state.wave * 101, state.wave + 1, state.score),
+    ...createGameState(state.seed + state.wave * 101, state.wave + 1, state.score, state.vocabulary),
     correctMatches: state.correctMatches,
     attempts: state.attempts,
   };
 };
 
-export const restartGame = (state) => createGameState(state.seed);
+export const restartGame = (state) => createGameState(state.seed, 1, 0, state.vocabulary);
 
 export const GAME_CONSTANTS = {
   ROUND_SECONDS,
