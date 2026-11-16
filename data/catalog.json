@@ -1,0 +1,74 @@
+{
+  "source": "ECDICT + Princeton WordNet",
+  "license": "MIT + WordNet License",
+  "books": {
+    "ielts": {
+      "label": "雅思",
+      "scopes": {
+        "full": {
+          "label": "完整词库",
+          "file": "data/ielts-full.json",
+          "wordCount": 10415,
+          "pairCount": 8149
+        },
+        "frequent": {
+          "label": "高频词库",
+          "file": "data/ielts-frequent.json",
+          "wordCount": 2916,
+          "pairCount": 2148
+        }
+      }
+    },
+    "cet6": {
+      "label": "六级",
+      "scopes": {
+        "full": {
+          "label": "完整词库",
+          "file": "data/cet6-full.json",
+          "wordCount": 7080,
+          "pairCount": 6095
+        },
+        "frequent": {
+          "label": "高频词库",
+          "file": "data/cet6-frequent.json",
+          "wordCount": 1982,
+          "pairCount": 1531
+        }
+      }
+    },
+    "postgrad": {
+      "label": "考研",
+      "scopes": {
+        "full": {
+          "label": "完整词库",
+          "file": "data/postgrad-full.json",
+          "wordCount": 6095,
+          "pairCount": 4229
+        },
+        "frequent": {
+          "label": "高频词库",
+          "file": "data/postgrad-frequent.json",
+          "wordCount": 1706,
+          "pairCount": 889
+        }
+      }
+    },
+    "cet4": {
+      "label": "四级",
+      "scopes": {
+        "full": {
+          "label": "完整词库",
+          "file": "data/cet4-full.json",
+          "wordCount": 5325,
+          "pairCount": 4353
+        },
+        "frequent": {
+          "label": "高频词库",
+          "file": "data/cet4-frequent.json",
+          "wordCount": 1491,
+          "pairCount": 1091
+        }
+      }
+    }
+  }
+}
