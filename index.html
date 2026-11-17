@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#107f86" />
     <title>词汇消消乐 · 英语同义词</title>
-    <link rel="stylesheet" href="./styles.css?v=13" />
+    <link rel="stylesheet" href="./styles.css?v=14" />
   </head>
   <body>
     <div class="page-shell" id="app">
@@ -28,6 +28,13 @@
               <span id="current-vocabulary">等待选择词书</span>
             </div>
             <button class="change-book-button" id="change-book-button" type="button">重置挑战词书</button>
+            <div class="account-cluster">
+              <button class="account-button" id="account-button" type="button" aria-haspopup="dialog" disabled>
+                <span class="account-mark" aria-hidden="true">◎</span>
+                <span class="account-label" id="account-label">登录同步</span>
+              </button>
+              <span class="sync-status" id="sync-status" aria-live="polite">本机保存</span>
+            </div>
           </div>
         </header>
 
@@ -235,7 +242,88 @@
       </section>
     </div>
 
+    <div class="auth-backdrop" id="auth-modal" hidden>
+      <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <header class="auth-header">
+          <div class="auth-mark" aria-hidden="true">◎</div>
+          <div>
+            <p class="section-kicker">ACCOUNT SYNC</p>
+            <h2 id="auth-title">登录同步进度</h2>
+          </div>
+          <button class="modal-close-button" id="auth-close" type="button" aria-label="关闭登录窗口">×</button>
+        </header>
+        <div class="auth-content">
+          <div class="auth-step" id="auth-email-step">
+            <p class="auth-copy">使用邮箱接收一次性验证码，登录后可在设备间同步词书进度。</p>
+            <label class="auth-label" for="auth-email">邮箱地址</label>
+            <input class="auth-input" id="auth-email" type="email" autocomplete="email" inputmode="email" placeholder="name@example.com" />
+            <button class="auth-primary-button" id="auth-send" type="button">发送验证码</button>
+          </div>
+
+          <div class="auth-step" id="auth-code-step" hidden>
+            <p class="auth-copy">验证码已发送至 <strong id="auth-email-display"></strong></p>
+            <label class="auth-label" for="auth-code">六位验证码</label>
+            <input class="auth-input auth-code-input" id="auth-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" />
+            <div class="auth-code-actions">
+              <button class="auth-primary-button" id="auth-verify" type="button">确认登录</button>
+              <button class="auth-secondary-button auth-resend-button" id="auth-resend" type="button">重新发送 (60s)</button>
+            </div>
+            <button class="auth-link-button" id="auth-change-email" type="button">修改邮箱</button>
+          </div>
+
+          <div class="auth-step auth-account-step" id="auth-account-step" hidden>
+            <p class="auth-copy">当前已登录，进度会自动同步到云端。</p>
+            <p class="auth-account-email" id="auth-account-email"></p>
+            <button class="auth-secondary-button" id="auth-sign-out" type="button">退出登录</button>
+          </div>
+
+          <p class="auth-error" id="auth-error" role="alert" hidden></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="conflict-backdrop" id="conflict-modal" hidden>
+      <section class="conflict-modal" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+        <header class="conflict-header">
+          <div>
+            <p class="section-kicker">SYNC REVIEW</p>
+            <h2 id="conflict-title">发现进度差异</h2>
+          </div>
+          <button class="modal-close-button" id="conflict-close" type="button" aria-label="关闭同步冲突窗口">×</button>
+        </header>
+        <div class="conflict-content">
+          <p class="conflict-copy">请选择要继续使用的记录，另一份记录会保持不变。</p>
+          <div class="conflict-comparison">
+            <section class="conflict-option" aria-labelledby="conflict-local-heading">
+              <h3 id="conflict-local-heading">本机进度</h3>
+              <p id="conflict-local-book"></p>
+              <p id="conflict-local-progress"></p>
+              <p id="conflict-local-updated"></p>
+            </section>
+            <section class="conflict-option" aria-labelledby="conflict-cloud-heading">
+              <h3 id="conflict-cloud-heading">云端进度</h3>
+              <p id="conflict-cloud-book"></p>
+              <p id="conflict-cloud-progress"></p>
+              <p id="conflict-cloud-updated"></p>
+            </section>
+          </div>
+          <div class="conflict-actions">
+            <button class="conflict-cloud-button" id="use-cloud-progress" type="button">继续云端进度</button>
+            <button class="conflict-local-button" id="use-local-progress" type="button">使用本机进度</button>
+          </div>
+          <div class="local-replace-confirmation" id="local-replace-confirmation" hidden>
+            <p>确认使用本机进度覆盖当前云端进度吗？</p>
+            <div class="confirmation-actions">
+              <button class="conflict-local-button" id="confirm-use-local" type="button">确认使用</button>
+              <button class="auth-secondary-button" id="cancel-use-local" type="button">取消</button>
+            </div>
+          </div>
+          <p class="conflict-error" id="conflict-error" role="alert" hidden></p>
+        </div>
+      </section>
+    </div>
+
     <div class="toast-layer" id="toast-layer" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./ui.js?v=13"></script>
+    <script type="module" src="./ui.js?v=14"></script>
   </body>
 </html>

@@ -10,17 +10,22 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=13';
+} from './game.js?v=14';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
-} from './vocabulary.js?v=13';
+} from './vocabulary.js?v=14';
 import {
   clearChallengeProgress,
-  getChallengeProgressSelection,
   loadChallengeProgress,
+  createChallengeProgressAdapter,
+  createPendingCloudDeleteAdapter,
+  shouldRebuildFromSyncRecord,
   saveChallengeProgress,
-} from './challenge-progress.js?v=13';
+} from './challenge-progress.js?v=14';
+import { createAuthService, getAuthErrorCopy, getResendSeconds, maskEmail } from './auth.js?v=14';
+import { createCloudProgressService } from './cloud-progress.js?v=14';
+import { createSyncController } from './sync-controller.js?v=14';
 
 const MATCH_ANIMATION_MS = 1_800;
 const WAVE_CLEAR_MS = 650;
@@ -76,6 +81,38 @@ const resetModal = document.querySelector('#reset-modal');
 const resetCancel = document.querySelector('#reset-cancel');
 const resetConfirm = document.querySelector('#reset-confirm');
 const resetError = document.querySelector('#reset-error');
+const accountButton = document.querySelector('#account-button');
+const accountLabel = document.querySelector('#account-label');
+const syncStatus = document.querySelector('#sync-status');
+const authModal = document.querySelector('#auth-modal');
+const authClose = document.querySelector('#auth-close');
+const authEmailStep = document.querySelector('#auth-email-step');
+const authCodeStep = document.querySelector('#auth-code-step');
+const authAccountStep = document.querySelector('#auth-account-step');
+const authEmail = document.querySelector('#auth-email');
+const authEmailDisplay = document.querySelector('#auth-email-display');
+const authCode = document.querySelector('#auth-code');
+const authSend = document.querySelector('#auth-send');
+const authVerify = document.querySelector('#auth-verify');
+const authResend = document.querySelector('#auth-resend');
+const authChangeEmail = document.querySelector('#auth-change-email');
+const authSignOut = document.querySelector('#auth-sign-out');
+const authAccountEmail = document.querySelector('#auth-account-email');
+const authError = document.querySelector('#auth-error');
+const conflictModal = document.querySelector('#conflict-modal');
+const conflictClose = document.querySelector('#conflict-close');
+const useCloudProgress = document.querySelector('#use-cloud-progress');
+const useLocalProgress = document.querySelector('#use-local-progress');
+const localReplaceConfirmation = document.querySelector('#local-replace-confirmation');
+const confirmUseLocal = document.querySelector('#confirm-use-local');
+const cancelUseLocal = document.querySelector('#cancel-use-local');
+const conflictError = document.querySelector('#conflict-error');
+const conflictLocalBook = document.querySelector('#conflict-local-book');
+const conflictLocalProgress = document.querySelector('#conflict-local-progress');
+const conflictLocalUpdated = document.querySelector('#conflict-local-updated');
+const conflictCloudBook = document.querySelector('#conflict-cloud-book');
+const conflictCloudProgress = document.querySelector('#conflict-cloud-progress');
+const conflictCloudUpdated = document.querySelector('#conflict-cloud-updated');
 
 let state = createGameState(Date.now());
 let catalog = null;
@@ -87,11 +124,78 @@ let soundOn = true;
 let reviewOpen = false;
 let activeChallengeLoaded = false;
 let audioContext = null;
+const auth = createAuthService();
+let syncController = null;
+let syncSnapshot = { syncState: 'guest', record: null, user: null, conflict: null, error: null };
+let authUnsubscribe = () => {};
+let authModalWasPlaying = false;
+let authEmailValue = '';
+let resendSentAt = 0;
+let resendTimer = null;
+let conflictWasPlaying = false;
+let controllerClient = null;
+let controllerSubscription = () => {};
 
 const SETTINGS_KEY = 'synonym-match-vocabulary-v1';
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
 const formatScore = (score) => String(score).padStart(4, '0');
+
+const getLocalAdapter = () => createChallengeProgressAdapter(window.localStorage);
+const getPendingDeleteAdapter = () => createPendingCloudDeleteAdapter(window.localStorage);
+const syncStatusCopy = (syncState) => ({ guest: '本机保存', initializing: '同步中', syncing: '同步中', synced: '已同步', offline: '离线保存', error: '同步失败', conflict: '待选择进度' }[syncState] ?? '本机保存');
+const updateAccountUi = () => {
+  const user = syncSnapshot.user ?? auth.getUser?.();
+  accountLabel.textContent = user?.email ? maskEmail(user.email) : '登录同步';
+  syncStatus.textContent = syncStatusCopy(syncSnapshot.syncState);
+  accountButton.disabled = false;
+  authAccountEmail.textContent = user?.email ? maskEmail(user.email) : '';
+};
+const catalogLabel = (record) => `${catalog?.books?.[record.bookId]?.label ?? record.bookId} · ${record.scope === 'frequent' ? '高频词库' : '完整词库'}`;
+const formatUpdated = (record) => Number.isFinite(record?.clientUpdatedAt) ? new Date(record.clientUpdatedAt).toLocaleString('zh-CN') : '时间未知';
+const renderConflict = (conflict) => {
+  const wasVisible = !conflictModal.hidden;
+  conflictModal.hidden = !conflict;
+  if (!conflict) {
+    if (wasVisible) gameFrame.inert = false;
+    return;
+  }
+  if (!wasVisible) {
+    conflictWasPlaying = state.status === 'playing';
+    stopTimer();
+    gameFrame.inert = true;
+    useCloudProgress.focus();
+  }
+  const local = conflict.local; const cloud = conflict.cloud;
+  conflictLocalBook.textContent = catalogLabel(local.record); conflictCloudBook.textContent = catalogLabel(cloud.record);
+  conflictLocalProgress.textContent = `${local.record.completedPairIds.length} / ${local.totalPairs} 组已完成`;
+  conflictCloudProgress.textContent = `${cloud.record.completedPairIds.length} / ${cloud.totalPairs} 组已完成`;
+  conflictLocalUpdated.textContent = `最近更新：${formatUpdated(local.record)}`; conflictCloudUpdated.textContent = `最近更新：${formatUpdated(cloud.record)}`;
+};
+const rebuildFromRecord = async (record) => {
+  if (!record || !catalog?.books?.[record.bookId]?.scopes?.[record.scope]) return false;
+  const vocabulary = await loadVocabulary(catalog, record.bookId, record.scope);
+  const totalChallenges = Math.ceil(vocabulary.pairs.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
+  const wave = Math.min(totalChallenges, Math.floor(record.completedPairIds.length / GAME_CONSTANTS.PAIRS_PER_WAVE) + 1);
+  state = createGameState(record.seed, wave, record.score, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts });
+  setupForm.elements.book.value = record.bookId; setupForm.elements.scope.value = record.scope; activeChallengeLoaded = true;
+  setSetupOpen(false); render(); if (!syncSnapshot.conflict) startTimer(); return true;
+};
+const onSyncSnapshot = (next) => {
+  syncSnapshot = next; updateAccountUi(); renderConflict(next.conflict);
+  if (shouldRebuildFromSyncRecord(next.record, state, activeChallengeLoaded)) void rebuildFromRecord(next.record).catch(() => {});
+};
+const createController = () => {
+  if (!catalog) return syncController;
+  const client = auth.getClient();
+  if (syncController && client === controllerClient) return syncController;
+  controllerSubscription();
+  syncController = createSyncController({ auth, cloud: client ? createCloudProgressService({ client, getUser: auth.getUser }) : null, local: getLocalAdapter(), pendingDeletes: getPendingDeleteAdapter(), loadVocabulary: (bookId, scope) => loadVocabulary(catalog, bookId, scope), isOnline: () => window.navigator.onLine !== false });
+  controllerClient = client;
+  controllerSubscription = syncController.subscribe(onSyncSnapshot);
+  return syncController;
+};
+
 
 const getStatusCopy = (currentState) => {
   if (currentState.status === 'resolving') return '配对成功，记住刚刚出现的中文释义';
@@ -298,20 +402,24 @@ const stopTimer = () => {
 const persistActiveChallenge = () => {
   if (!activeChallengeLoaded) return;
   try {
+    const record = saveChallengeProgress(window.localStorage, state);
     if (state.status === 'complete') {
-      clearChallengeProgress(window.localStorage);
+      if (syncController && syncSnapshot.user) syncController.notifyChallengeComplete(record);
+      else clearChallengeProgress(window.localStorage);
       activeChallengeLoaded = false;
       return;
     }
-    saveChallengeProgress(window.localStorage, state);
+    syncController?.notifyLocalProgress(record);
   } catch {
     showToast('浏览器无法保存挑战进度', 'neutral');
   }
 };
 
-const clearActiveChallenge = () => {
+const clearActiveChallenge = async () => {
   try {
-    clearChallengeProgress(window.localStorage);
+    const record = syncSnapshot.record ?? (activeChallengeLoaded ? saveChallengeProgress(window.localStorage, state) : null);
+    if (syncController && syncSnapshot.user && record) await syncController.clearActiveChallenge(record);
+    else clearChallengeProgress(window.localStorage);
     activeChallengeLoaded = false;
     return true;
   } catch {
@@ -500,9 +608,11 @@ const handleCancelReset = () => {
   startTimer();
 };
 
-const handleConfirmReset = () => {
-  if (!clearActiveChallenge()) {
+const handleConfirmReset = async () => {
+  resetConfirm.disabled = true;
+  if (!await clearActiveChallenge()) {
     resetError.hidden = false;
+    resetConfirm.disabled = false;
     return;
   }
   clearScheduledWork();
@@ -512,6 +622,7 @@ const handleConfirmReset = () => {
   resetModal.hidden = true;
   updateSetupCounts();
   setSetupOpen(true);
+  resetConfirm.disabled = false;
 };
 
 const handleResultAction = () => {
@@ -525,7 +636,7 @@ const handleResultAction = () => {
 };
 
 const restoreActiveChallenge = async () => {
-  const selection = getChallengeProgressSelection(window.localStorage);
+  const selection = getLocalAdapter().getSelection();
   if (!selection || !catalog.books[selection.bookId]?.scopes[selection.scope]) return false;
   const vocabulary = await loadVocabulary(catalog, selection.bookId, selection.scope);
   const saved = loadChallengeProgress(window.localStorage, vocabulary);
@@ -551,15 +662,78 @@ const restoreActiveChallenge = async () => {
   return true;
 };
 
+const clearResendTimer = () => { if (resendTimer !== null) window.clearInterval(resendTimer); resendTimer = null; };
+const setAuthError = (error) => { authError.textContent = getAuthErrorCopy(error); authError.hidden = false; };
+const renderAuthStep = (step) => {
+  authEmailStep.hidden = step !== 'email'; authCodeStep.hidden = step !== 'code'; authAccountStep.hidden = step !== 'account';
+  if (step !== 'code') clearResendTimer();
+};
+const updateResendLabel = () => {
+  const seconds = getResendSeconds(resendSentAt);
+  authResend.disabled = seconds > 0; authResend.textContent = seconds > 0 ? `重新发送 (${seconds}s)` : '重新发送';
+  if (!seconds) clearResendTimer();
+};
+const startResendTimer = () => { clearResendTimer(); updateResendLabel(); resendTimer = window.setInterval(updateResendLabel, 1000); };
+const openAuth = () => {
+  if (syncSnapshot.conflict) {
+    renderConflict(syncSnapshot.conflict);
+    conflictClose.focus();
+    return;
+  }
+  authModalWasPlaying = state.status === 'playing'; stopTimer(); authError.hidden = true;
+  renderAuthStep(syncSnapshot.user ? 'account' : (authEmailValue ? 'code' : 'email')); authModal.hidden = false;
+  (syncSnapshot.user ? authClose : authEmail).focus();
+};
+const closeAuth = () => { authModal.hidden = true; clearResendTimer(); authError.hidden = true; accountButton.focus(); if (authModalWasPlaying) startTimer(); };
+const handleSendOtp = async () => {
+  authError.hidden = true; authSend.disabled = true;
+  try { authEmailValue = authEmail.value.trim().toLowerCase(); await auth.sendOtp(authEmailValue); authEmailDisplay.textContent = maskEmail(authEmailValue); resendSentAt = Date.now(); renderAuthStep('code'); startResendTimer(); authCode.focus(); }
+  catch (error) { setAuthError(error); authEmail.focus(); authEmail.setAttribute('aria-invalid', 'true'); }
+  finally { authSend.disabled = false; }
+};
+const handleVerifyOtp = async () => {
+  authError.hidden = true; authVerify.disabled = true;
+  try { await auth.verifyOtp(authEmailValue || authEmail.value, authCode.value); createController(); await syncController.initialize(); closeAuth(); }
+  catch (error) { setAuthError(error); authCode.focus(); authCode.setAttribute('aria-invalid', 'true'); }
+  finally { authVerify.disabled = false; }
+};
+const handleResendOtp = async () => { if (authResend.disabled) return; authError.hidden = true; try { await auth.sendOtp(authEmailValue); resendSentAt = Date.now(); startResendTimer(); } catch (error) { setAuthError(error); } };
+const handleSignOut = async () => { authSignOut.disabled = true; try { await syncController?.signOut(); renderAuthStep('email'); closeAuth(); } catch (error) { setAuthError(error); } finally { authSignOut.disabled = false; } };
+const handleConflictChoice = async (choice) => {
+  conflictError.hidden = true;
+  try {
+    await syncController.resolveConflict(choice);
+    conflictModal.hidden = true;
+    localReplaceConfirmation.hidden = true;
+    gameFrame.inert = false;
+    if (syncSnapshot.record) await rebuildFromRecord(syncSnapshot.record);
+    else if (conflictWasPlaying) startTimer();
+    conflictWasPlaying = false;
+  } catch (error) {
+    conflictError.textContent = '同步失败，请稍后重试。'; conflictError.hidden = false;
+  }
+};
+const handleOnline = () => { void syncController?.retry().catch(() => {}); };
+const handleOffline = () => { syncSnapshot = { ...syncSnapshot, syncState: 'offline' }; updateAccountUi(); };
+
 const initializeVocabularySetup = async () => {
   startGameButton.disabled = true;
   try {
-    catalog = await loadVocabularyCatalog();
+    const [catalogResult] = await Promise.allSettled([loadVocabularyCatalog(), auth.initialize()]);
+    if (catalogResult.status === 'rejected') throw catalogResult.reason;
+    catalog = catalogResult.value;
     restoreSetupSelection();
     updateSetupCounts();
     setupError.hidden = true;
     startGameButton.disabled = false;
-    await restoreActiveChallenge();
+    createController();
+    const snapshot = await syncController.initialize();
+    if (!snapshot.record) await restoreActiveChallenge();
+    else await rebuildFromRecord(snapshot.record);
+    authUnsubscribe = auth.subscribe(() => {
+      updateAccountUi();
+      if (catalog) void Promise.resolve().then(() => { createController(); return syncController.initialize(); }).catch(() => {});
+    });
   } catch (error) {
     setupError.textContent = error instanceof Error ? error.message : '词库目录加载失败，请刷新重试。';
     setupError.hidden = false;
@@ -577,6 +751,21 @@ resetCancel.addEventListener('click', handleCancelReset);
 resetConfirm.addEventListener('click', handleConfirmReset);
 setupForm.addEventListener('change', updateSetupCounts);
 setupForm.addEventListener('submit', handleStartGame);
+accountButton.addEventListener('click', openAuth);
+syncStatus.addEventListener('click', openAuth);
+authClose.addEventListener('click', closeAuth);
+authSend.addEventListener('click', handleSendOtp);
+authVerify.addEventListener('click', handleVerifyOtp);
+authResend.addEventListener('click', handleResendOtp);
+authChangeEmail.addEventListener('click', () => { authEmailValue = authEmail.value; renderAuthStep('email'); authEmail.focus(); });
+authSignOut.addEventListener('click', handleSignOut);
+useCloudProgress.addEventListener('click', () => handleConflictChoice('cloud'));
+useLocalProgress.addEventListener('click', () => { localReplaceConfirmation.hidden = false; });
+confirmUseLocal.addEventListener('click', () => handleConflictChoice('local'));
+cancelUseLocal.addEventListener('click', () => { localReplaceConfirmation.hidden = true; });
+conflictClose.addEventListener('click', () => { conflictModal.hidden = true; gameFrame.inert = false; accountButton.focus(); if (conflictWasPlaying) startTimer(); });
+window.addEventListener('online', handleOnline);
+window.addEventListener('offline', handleOffline);
 
 render();
 setSetupOpen(true);
