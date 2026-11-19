@@ -254,8 +254,7 @@ test('rating presentation maps every tier to its supplied animation without scor
 
 test('tile presentation hides gloss until the matching animation', () => {
   const state = createGameState(7);
-  const pairId = state.tiles.find((tile) => !tile.distractor).pairId;
-  const pairTiles = state.tiles.filter((tile) => tile.pairId === pairId);
+  const pairTiles = ['contrast', 'compare'].map(word => state.tiles.find(tile => tile.word === word));
   assert.deepEqual(getTilePresentation(state, pairTiles[0]), {
     hidden: false,
     resolving: false,
@@ -267,7 +266,7 @@ test('tile presentation hides gloss until the matching animation', () => {
   assert.deepEqual(getTilePresentation(resolving, pairTiles[0]), {
     hidden: false,
     resolving: true,
-    gloss: pairTiles[0].gloss,
+    gloss: { compare: '比较', contrast: '对照' }[pairTiles[0].word],
   });
 
   const cleared = completePendingMatch(resolving);

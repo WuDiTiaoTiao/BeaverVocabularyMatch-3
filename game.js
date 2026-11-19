@@ -1,3 +1,5 @@
+import { getReviewMeanings, getWordSharedMeaning, resolveSharedMeaning, splitMeanings } from './meanings.js?v=30';
+
 const ROUND_SECONDS = 60;
 const TILES_PER_WAVE = 15;
 const PAIRS_PER_WAVE = 6;
@@ -50,18 +52,18 @@ export const WORD_DETAILS = {
 };
 
 export const SYNONYM_BANK = [
-  { pairId: 'abandon', words: ['abandon', 'desert'] },
-  { pairId: 'accelerate', words: ['accelerate', 'speed up'] },
-  { pairId: 'avoid', words: ['avoid', 'evade'] },
-  { pairId: 'compare', words: ['compare', 'contrast'] },
-  { pairId: 'begin', words: ['begin', 'commence'] },
-  { pairId: 'accurate', words: ['accurate', 'precise'] },
-  { pairId: 'demand', words: ['demand', 'require'] },
-  { pairId: 'select', words: ['select', 'choose'] },
-  { pairId: 'support', words: ['support', 'assist'] },
-  { pairId: 'preserve', words: ['preserve', 'conserve'] },
-  { pairId: 'expand', words: ['expand', 'extend'] },
-  { pairId: 'essential', words: ['essential', 'vital'] },
+  { pairId: 'abandon', words: ['abandon', 'desert'], sharedMeaning: { text: '抛弃；离弃', pos: 'v' } },
+  { pairId: 'accelerate', words: ['accelerate', 'speed up'], sharedMeaning: { text: '加快；加速', pos: 'v' } },
+  { pairId: 'avoid', words: ['avoid', 'evade'], sharedMeaning: { text: '躲避；避开', pos: 'v' } },
+  { pairId: 'compare', words: ['compare', 'contrast'], sharedMeaning: { text: '比较；对照', pos: 'v' } },
+  { pairId: 'begin', words: ['begin', 'commence'], sharedMeaning: { text: '开始；着手', pos: 'v' } },
+  { pairId: 'accurate', words: ['accurate', 'precise'], sharedMeaning: { text: '准确的；精确的', pos: 'a' } },
+  { pairId: 'demand', words: ['demand', 'require'], sharedMeaning: { text: '要求', pos: 'v' } },
+  { pairId: 'select', words: ['select', 'choose'], sharedMeaning: { text: '选择；挑选', pos: 'v' } },
+  { pairId: 'support', words: ['support', 'assist'], sharedMeaning: { text: '帮助；协助', pos: 'v' } },
+  { pairId: 'preserve', words: ['preserve', 'conserve'], sharedMeaning: { text: '保存；保藏', pos: 'v' } },
+  { pairId: 'expand', words: ['expand', 'extend'], sharedMeaning: { text: '扩大；扩展', pos: 'v' } },
+  { pairId: 'essential', words: ['essential', 'vital'], sharedMeaning: { text: '必不可少的；必要的', pos: 'a' } },
 ];
 
 const DISTRACTORS = [
@@ -92,8 +94,8 @@ const getWordEntry = (word, vocabulary) => {
   return {
     word,
     phonetic: details.phonetic,
-    meanings: details.meanings.map((meaning) => ({ ...meaning })),
-    gloss: details.meanings[0].text,
+    meanings: splitMeanings(details.meanings),
+    gloss: splitMeanings(details.meanings)[0].text,
   };
 };
 
@@ -193,6 +195,7 @@ const buildTiles = (wave, seed, vocabulary, completedBookPairIds) => {
     pair.words.map((word, variant) => ({
       id: `${pair.pairId}-${variant}`,
       ...getWordEntry(word, vocabulary),
+      sharedMeaning: resolveSharedMeaning(pair, vocabulary.entries),
       pairId: pair.pairId,
       distractor: false,
       countsForBookProgress: pair.countsForBookProgress,
@@ -376,7 +379,7 @@ export const getWaveReview = (state) => {
       word: tile.word,
       gloss: tile.gloss,
       phonetic: tile.phonetic,
-      meanings: tile.meanings.map((meaning) => ({ ...meaning })),
+      meanings: getReviewMeanings(tile.meanings, tile.sharedMeaning),
     };
     if (tile.distractor) {
       extras.push(entry);
@@ -401,7 +404,7 @@ export const getTilePresentation = (state, tile) => {
   return {
     hidden: state.matchedPairIds.includes(tile.pairId),
     resolving,
-    gloss: resolving ? tile.gloss : null,
+    gloss: resolving ? getWordSharedMeaning(tile.meanings, tile.sharedMeaning)?.text ?? null : null,
   };
 };
 

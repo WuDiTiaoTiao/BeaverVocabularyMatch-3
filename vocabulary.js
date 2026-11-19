@@ -14,5 +14,19 @@ export const resolveVocabularyPath = (catalog, bookId, scope) => {
   return scopeMeta.file;
 };
 
-export const loadVocabulary = (catalog, bookId, scope, fetcher) =>
-  fetchJson(`./${resolveVocabularyPath(catalog, bookId, scope)}?v=10`, fetcher);
+export const loadVocabulary = async (catalog, bookId, scope, fetcher) => {
+  const [vocabulary, sharedMeanings] = await Promise.all([
+    fetchJson(`./${resolveVocabularyPath(catalog, bookId, scope)}?v=10`, fetcher),
+    fetchJson('./data/shared-meanings.json?v=29', fetcher),
+  ]);
+  return {
+    ...vocabulary,
+    pairs: vocabulary.pairs.map(pair => {
+      const key = [...pair.words].sort().join('|');
+      const senseId = sharedMeanings.pairs[key];
+      const sense = sharedMeanings.senses[senseId];
+      if (!sense?.text) throw new Error(`词对缺少共同释义：${pair.words.join(' / ')}`);
+      return { ...pair, sharedMeaning: { senseId, ...sense } };
+    }),
+  };
+};

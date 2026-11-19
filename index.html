@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#107f86" />
+    <meta name="theme-color" content="#397ccc" />
     <title>词汇消消乐 · 英语同义词</title>
-    <link rel="stylesheet" href="./styles.css?v=28" />
+    <script src="./theme.js?v=31"></script>
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <div class="page-shell" id="app">
@@ -119,6 +120,10 @@
               <span class="button-icon" aria-hidden="true">↻</span>
               <span>重开</span>
             </button>
+            <button class="action-button theme-button" id="theme-button" type="button" aria-label="切换主题，当前蓝色，点击切换为紫色">
+              <span>主题</span>
+              <span id="theme-label">蓝色</span>
+            </button>
           </div>
           <p class="footer-copy" id="footer-copy">每局 15 个词块，配对后记得读一遍。</p>
             </footer>
@@ -204,7 +209,7 @@
           </section>
         </div>
         <footer class="review-footer">
-          <p>停留复习不计时，准备好后再继续。</p>
+          <p>红色为本组相同或近似义，复习不计时。</p>
           <button class="review-continue" id="review-continue" type="button">下一局 <span aria-hidden="true">→</span></button>
         </footer>
       </section>
@@ -323,6 +328,6 @@
     <audio id="background-music" src="./assets/study-session-lofi.mp3?v=18" preload="auto" loop aria-hidden="true"></audio>
     <audio id="success-sound" src="./assets/dingdong-sound.mp3?v=18" preload="auto" aria-hidden="true"></audio>
     <audio id="victory-sound" src="./assets/round-victory-sound.mp3?v=19" preload="auto" aria-hidden="true"></audio>
-    <script type="module" src="./ui.js?v=28"></script>
+    <script type="module" src="./ui.js?v=30"></script>
   </body>
 </html>

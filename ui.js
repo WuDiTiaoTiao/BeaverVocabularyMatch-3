@@ -11,11 +11,11 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=16';
+} from './game.js?v=30';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
-} from './vocabulary.js?v=16';
+} from './vocabulary.js?v=29';
 import {
   chooseStartupVocabularySelection,
   clearChallengeProgress,
@@ -281,7 +281,15 @@ const appendReviewDetails = (container, { word, phonetic, meanings }) => {
   ipa.textContent = phonetic;
   const meaningList = document.createElement('span');
   meaningList.className = 'review-meanings';
-  meaningList.textContent = meanings.map((meaning) => meaning.text).join('；');
+  for (const [index, meaning] of meanings.entries()) {
+    if (index > 0) meaningList.append(document.createTextNode('；'));
+    for (const segment of meaning.segments) {
+      const text = document.createElement('span');
+      if (segment.shared) text.className = 'meaning-shared';
+      text.textContent = segment.text;
+      meaningList.append(text);
+    }
+  }
   container.append(english, ipa, meaningList);
 };
 
@@ -324,7 +332,7 @@ const renderTiles = () => {
 
     if (presentation.gloss) {
       const reveal = document.createElement('span');
-      reveal.className = 'tile-reveal';
+      reveal.className = 'tile-reveal meaning-shared';
       reveal.setAttribute('role', 'status');
       reveal.textContent = presentation.gloss;
       slot.append(reveal);
