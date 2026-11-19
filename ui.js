@@ -34,7 +34,8 @@ import { createSyncController } from './sync-controller.js?v=16';
 import { createBackgroundMusicController } from './background-music.js?v=17';
 import { createSuccessSoundController } from './success-sound.js?v=18';
 
-const MATCH_ANIMATION_MS = 1_800;
+const MATCH_ANIMATION_MS = 2_000;
+const RATING_ANIMATION_MS = 750;
 const WAVE_CLEAR_MS = 650;
 
 const board = document.querySelector('#game-board');
@@ -128,6 +129,8 @@ let state = createGameState(Date.now());
 let catalog = null;
 let timerId = null;
 let matchTimeout = null;
+let ratingTimeout = null;
+let ratingPendingMatch = null;
 let waveClearTimeout = null;
 let hintTimeout = null;
 let soundOn = true;
@@ -334,19 +337,32 @@ const renderTiles = () => {
 const renderRating = () => {
   const pending = state.pendingMatch;
   const visible = state.status === 'resolving' && pending;
-  const wasVisible = !ratingOverlay.hidden;
-  ratingOverlay.hidden = !visible;
-  if (!visible) return;
+  if (!visible) {
+    if (ratingTimeout !== null) window.clearTimeout(ratingTimeout);
+    ratingTimeout = null;
+    ratingPendingMatch = null;
+    ratingOverlay.hidden = true;
+    return;
+  }
+  // Renders during the gloss window must not restart an expired rating.
+  if (ratingPendingMatch === pending) return;
+  if (ratingTimeout !== null) window.clearTimeout(ratingTimeout);
+  ratingPendingMatch = pending;
+  ratingOverlay.hidden = false;
   const presentation = getRatingPresentation(pending.rating);
   ratingOverlay.dataset.rating = pending.rating;
   ratingOverlay.setAttribute('aria-label', presentation.label);
   ratingLabel.textContent = presentation.label;
   ratingLabel.hidden = Boolean(presentation.asset);
   ratingEffect.hidden = !presentation.asset;
-  if (presentation.asset && !wasVisible) {
+  if (presentation.asset) {
     ratingAnimationSequence += 1;
-    ratingEffect.src = `./assets/${presentation.asset}-effect.png?v=23&play=${ratingAnimationSequence}`;
+    ratingEffect.src = `./assets/${presentation.asset}-effect.png?v=24&play=${ratingAnimationSequence}`;
   }
+  ratingTimeout = window.setTimeout(() => {
+    ratingOverlay.hidden = true;
+    ratingTimeout = null;
+  }, RATING_ANIMATION_MS);
 };
 
 const renderReview = () => {
@@ -537,10 +553,13 @@ const handleHint = () => {
 };
 
 const clearScheduledWork = () => {
-  for (const timeout of [matchTimeout, waveClearTimeout, hintTimeout]) {
+  for (const timeout of [matchTimeout, ratingTimeout, waveClearTimeout, hintTimeout]) {
     if (timeout !== null) window.clearTimeout(timeout);
   }
   matchTimeout = null;
+  ratingTimeout = null;
+  ratingPendingMatch = null;
+  ratingOverlay.hidden = true;
   waveClearTimeout = null;
   hintTimeout = null;
 };

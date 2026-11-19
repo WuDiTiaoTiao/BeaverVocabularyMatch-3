@@ -10,7 +10,7 @@ test('every rating tier uses the supplied transparent PNG artwork', async () => 
   const styles = await readFile(new URL('./styles.css', import.meta.url), 'utf8');
 
   assert.match(ui, /\$\{presentation\.asset\}-effect\.png/);
-  assert.match(styles, /\.rating-effect[^}]+animation:\s*rating-pop 1\.8s/);
+  assert.match(styles, /\.rating-effect[^}]+animation:\s*rating-pop 0\.75s/);
 
   for (const tier of tiers) {
     const image = await readFile(new URL(`./assets/${tier}-effect.png`, import.meta.url));
