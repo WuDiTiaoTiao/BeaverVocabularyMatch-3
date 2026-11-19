@@ -293,7 +293,7 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   transform: translate(-50%, -50%);
 }
 .rating-overlay[hidden] { display: none; }
-.rating-effect { display: block; width: auto; max-width: min(308px, 58.8vw); max-height: 154px; object-fit: contain; transform-origin: center; animation: rating-pop 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.rating-effect { display: block; width: min(308px, 58.8vw); height: auto; aspect-ratio: 16 / 5; max-width: 100%; max-height: 154px; object-fit: contain; transform-origin: center; animation: rating-pop 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .rating-effect[hidden] { display: none; }
 .rating-overlay strong { position: relative; z-index: 2; color: var(--lemon); text-shadow: 0 5px 0 #b35a2a, 0 10px 24px rgba(0,0,0,0.34); font-size: 54px; font-style: italic; font-weight: 950; letter-spacing: 0.03em; line-height: 0.95; }
 .rating-overlay[data-rating="GREAT"] strong { color: #78e8c0; }
@@ -570,7 +570,7 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   .tile-word { font-size: 13px; line-height: 1.05; }
   .tile-reveal { padding: 4px 6px; font-size: 9px; }
   .rating-overlay { inset: 50% auto auto 50%; min-width: min(330px, 92vw); }
-  .rating-effect { width: auto; max-width: min(231px, 64.4vw); max-height: 105px; }
+  .rating-effect { width: min(231px, 64.4vw); max-height: 105px; }
   .rating-overlay strong { font-size: 38px; }
   .rating-overlay > span:not(.rating-rays) { font-size: 24px; }
   .game-footer { display: block; margin-top: 7px; }

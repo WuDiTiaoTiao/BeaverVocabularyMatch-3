@@ -103,6 +103,39 @@ test('near meanings keep the shared context and do not match negated definitions
   assert.equal(meanings[0].segments.map(segment => segment.text).join(''), 'adj. 不准确的, 精确的');
 });
 
+test('review shows a repeated source definition only once and highlights the remaining occurrence', () => {
+  const source = [{ text: 'vi. 发生, 发生, 恰巧', examFrequency: 1 }];
+  const review = getReviewMeanings(source, { text: '发生', pos: 'v' });
+  assert.deepEqual(review.map(meaning => meaning.text), ['vi. 发生, 恰巧']);
+  assert.deepEqual(review[0].segments.filter(segment => segment.shared).map(segment => segment.text), ['发生']);
+  assert.equal(source[0].text, 'vi. 发生, 发生, 恰巧');
+});
+
+test('review removes duplicated specialist definitions but retains the original tag on unique definitions', () => {
+  const review = getReviewMeanings([
+    { text: 'n. 国家, 民族\\n[法] 民族, 国家', examFrequency: 2 },
+    { text: '[法] 民族, 国籍\\n[计] 民族, 字段', examFrequency: 1 },
+  ], { text: '国家；民族', pos: 'n' });
+  assert.deepEqual(review.map(meaning => meaning.text), ['n. 国家, 民族', '[法] 国籍', '[计] 字段']);
+  assert.deepEqual(review.map(meaning => meaning.examFrequency), [2, 1, 1]);
+});
+
+test('review keeps identical translations when their explicit parts of speech differ', () => {
+  const review = getReviewMeanings([{ text: 'n. 记录\\nv. 记录\\nvt. 记录\\nvi. 记录\\n[计] 记录, 日志', examFrequency: 1 }], null);
+  assert.deepEqual(review.map(meaning => meaning.text), ['n. 记录', 'v. 记录', 'vt. 记录', 'vi. 记录', '[计] 日志']);
+});
+
+test('review deduplication preserves context and punctuation within parentheses', () => {
+  const review = getReviewMeanings([{ text: 'n. 条目（甲，乙）, 条目（甲，乙）, 条目（其他）\\n[法] 条目（法律）', examFrequency: 1 }], null);
+  assert.deepEqual(review.map(meaning => meaning.text), ['n. 条目（甲，乙）, 条目（其他）', '[法] 条目（法律）']);
+});
+
+test('review consistently uses adj. for adjective labels from both dictionary formats', () => {
+  const review = getReviewMeanings([{ text: 'a. 国家的, 正式的\\nadj. 正式的, 礼仪用的\\nn. 国家', examFrequency: 1 }], { text: '正式的', pos: 'a' });
+  assert.deepEqual(review.map(meaning => meaning.text), ['adj. 国家的, 正式的', 'adj. 礼仪用的', 'n. 国家']);
+  assert.deepEqual(review.flatMap(meaning => meaning.segments).filter(segment => segment.shared).map(segment => segment.text), ['正式的']);
+});
+
 test('all loaded vocabulary pairs receive a Chinese meaning tied to their shared WordNet sense', async () => {
   const catalog = JSON.parse(await readFile(new URL('./data/catalog.json', import.meta.url), 'utf8'));
   const fetcher = async path => ({ ok: true, json: async () => JSON.parse(await readFile(new URL(path.split('?')[0], import.meta.url), 'utf8')) });

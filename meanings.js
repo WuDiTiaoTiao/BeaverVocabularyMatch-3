@@ -1,11 +1,77 @@
 const POS_LABELS = { n: 'n.', v: 'v.', a: 'adj.', s: 'adj.', r: 'adv.' };
 
-export const splitMeanings = (meanings) => meanings.flatMap((meaning) =>
-  meaning.text.split(/(?:\\n|\r?\n)+/u)
-    .map(text => text.trim())
-    .filter(Boolean)
-    .map(text => ({ ...meaning, text })),
-);
+const splitDefinitionTerms = (text) => {
+  const parts = [];
+  const closing = [];
+  const brackets = { '(': ')', '（': '）', '[': ']', '【': '】' };
+  let start = 0;
+  let separator = '';
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (brackets[character]) closing.push(brackets[character]);
+    else if (character === closing.at(-1)) closing.pop();
+    if (closing.length || !/[;,，；、]/u.test(character)) continue;
+    parts.push({ text: text.slice(start, index).trim(), separator });
+    let next = index + 1;
+    while (/\s/u.test(text[next] ?? '') && next < text.length) next += 1;
+    separator = text.slice(index, next);
+    start = next;
+    index = next - 1;
+  }
+  parts.push({ text: text.slice(start).trim(), separator });
+  return parts;
+};
+
+const readDefinitionPrefix = (text) => {
+  let body = text;
+  let prefix = '';
+  const labels = [];
+  let match;
+  while ((match = body.match(/^(\[[^\]]+\]|(?:n|v|vt|vi|a|adj|s|ad|adv|r|pron|num|prep|conj|interj|phr|pl)\.)(\s*)/iu))) {
+    const label = match[1].toLowerCase();
+    const normalized = ['a.', 'adj.', 's.'].includes(label) ? 'adj.' : match[1];
+    prefix += normalized + match[2];
+    if (!label.startsWith('[')) labels.push(normalized.toLowerCase());
+    body = body.slice(match[0].length);
+  }
+  return { body, prefix, pos: labels.sort().join('') };
+};
+
+export const splitMeanings = (meanings) => {
+  const result = [];
+  const seen = new Map();
+  for (const meaning of meanings) {
+    for (const line of meaning.text.split(/(?:\\n|\r?\n)+/u)) {
+      let text = '';
+      let prefix = '';
+      let pos = '';
+      let groupSeparator = '';
+      let groupStarted = false;
+      for (const part of splitDefinitionTerms(line.trim())) {
+        const parsed = readDefinitionPrefix(part.text);
+        if (parsed.prefix) {
+          prefix = parsed.prefix;
+          pos = parsed.pos;
+          groupSeparator = part.separator;
+          groupStarted = false;
+        }
+        if (!parsed.body) continue;
+        const key = parsed.body.normalize('NFKC').replace(/\s+/gu, ' ');
+        const previous = seen.get(key);
+        // An untyped specialist gloss adds no new definition if already listed.
+        // Explicit noun, verb, transitive and intransitive uses stay distinct.
+        if (previous && (!pos || previous.has(pos))) continue;
+        if (!previous) seen.set(key, new Set());
+        seen.get(key).add(pos);
+        text += (text ? (groupStarted ? part.separator : groupSeparator) : '')
+          + (groupStarted ? '' : prefix) + parsed.body;
+        groupStarted = true;
+      }
+      if (text) result.push({ ...meaning, text });
+    }
+  }
+  return result;
+};
 
 const getPos = (text) => {
   const prefix = text.match(/^(n|v|vt|vi|a|adj|ad|adv|r|s|pron|num|prep|conj|interj|phr|pl)\./iu)?.[1].toLowerCase();

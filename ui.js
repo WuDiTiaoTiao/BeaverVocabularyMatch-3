@@ -11,7 +11,7 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=30';
+} from './game.js?v=32';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
@@ -152,6 +152,14 @@ let conflictWasPlaying = false;
 let controllerClient = null;
 let controllerSubscription = () => {};
 let ratingAnimationSequence = 0;
+
+// PNGs replay through CSS; a new URL on each match needlessly reloads the image.
+const ratingPreloads = ['unbelievable', 'amazing', 'excellent', 'perfect', 'good'].map(asset => {
+  const image = new Image(960, 300);
+  image.src = `./assets/${asset}-effect.png?v=24`;
+  void image.decode().catch(() => {});
+  return image;
+});
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
@@ -349,6 +357,7 @@ const renderRating = () => {
     if (ratingTimeout !== null) window.clearTimeout(ratingTimeout);
     ratingTimeout = null;
     ratingPendingMatch = null;
+    ratingAnimationSequence += 1;
     ratingOverlay.hidden = true;
     return;
   }
@@ -356,21 +365,32 @@ const renderRating = () => {
   if (ratingPendingMatch === pending) return;
   if (ratingTimeout !== null) window.clearTimeout(ratingTimeout);
   ratingPendingMatch = pending;
-  ratingOverlay.hidden = false;
+  const sequence = ++ratingAnimationSequence;
+  ratingOverlay.hidden = true;
   const presentation = getRatingPresentation(pending.rating);
   ratingOverlay.dataset.rating = pending.rating;
   ratingOverlay.setAttribute('aria-label', presentation.label);
   ratingLabel.textContent = presentation.label;
-  ratingLabel.hidden = Boolean(presentation.asset);
-  ratingEffect.hidden = !presentation.asset;
+  const show = (artworkReady) => {
+    if (sequence !== ratingAnimationSequence || state.pendingMatch !== pending || state.status !== 'resolving') return;
+    ratingLabel.hidden = artworkReady;
+    ratingEffect.hidden = !artworkReady;
+    // Flush the previous animation before restarting, including consecutive tiers.
+    ratingEffect.style.animation = 'none';
+    ratingOverlay.hidden = false;
+    void ratingEffect.offsetWidth;
+    ratingEffect.style.animation = '';
+    ratingTimeout = window.setTimeout(() => {
+      if (sequence !== ratingAnimationSequence) return;
+      ratingOverlay.hidden = true;
+      ratingTimeout = null;
+    }, RATING_ANIMATION_MS);
+  };
   if (presentation.asset) {
-    ratingAnimationSequence += 1;
-    ratingEffect.src = `./assets/${presentation.asset}-effect.png?v=24&play=${ratingAnimationSequence}`;
-  }
-  ratingTimeout = window.setTimeout(() => {
-    ratingOverlay.hidden = true;
-    ratingTimeout = null;
-  }, RATING_ANIMATION_MS);
+    ratingEffect.hidden = true;
+    ratingEffect.src = `./assets/${presentation.asset}-effect.png?v=24`;
+    void ratingEffect.decode().then(() => show(true), () => show(false));
+  } else show(false);
 };
 
 const renderReview = () => {
@@ -567,6 +587,7 @@ const clearScheduledWork = () => {
   matchTimeout = null;
   ratingTimeout = null;
   ratingPendingMatch = null;
+  ratingAnimationSequence += 1;
   ratingOverlay.hidden = true;
   waveClearTimeout = null;
   hintTimeout = null;

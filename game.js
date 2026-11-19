@@ -1,4 +1,4 @@
-import { getReviewMeanings, getWordSharedMeaning, resolveSharedMeaning, splitMeanings } from './meanings.js?v=30';
+import { getReviewMeanings, getWordSharedMeaning, resolveSharedMeaning, splitMeanings } from './meanings.js?v=32';
 
 const ROUND_SECONDS = 60;
 const TILES_PER_WAVE = 15;
