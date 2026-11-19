@@ -214,10 +214,29 @@ const buildTiles = (wave, seed, vocabulary, completedBookPairIds) => {
 };
 
 export const getPerformanceRating = (durationMs) => {
-  if (durationMs <= 2_000) return { label: 'PERFECT', bonus: 100 };
-  if (durationMs <= 4_000) return { label: 'GREAT', bonus: 70 };
-  return { label: 'GOOD', bonus: 40 };
+  const label = durationMs <= 10_000
+    ? 'UNBELIEVABLE'
+    : durationMs <= 20_000
+      ? 'AMAZING'
+      : durationMs <= 30_000
+        ? 'EXCELLENT'
+        : durationMs <= 40_000
+          ? 'PERFECT'
+          : 'GOOD';
+  const bonus = durationMs <= 2_000 ? 100 : durationMs <= 4_000 ? 70 : 40;
+  return { label, bonus };
 };
+
+const RATING_PRESENTATIONS = {
+  UNBELIEVABLE: { label: 'Unbelievable!', asset: 'unbelievable' },
+  AMAZING: { label: 'Amazing!', asset: 'amazing' },
+  EXCELLENT: { label: 'Excellent!', asset: 'excellent' },
+  PERFECT: { label: 'Perfect!', asset: 'perfect' },
+  GOOD: { label: 'Good!', asset: 'good' },
+};
+
+export const getRatingPresentation = (rating) => RATING_PRESENTATIONS[rating]
+  ?? { label: typeof rating === 'string' ? rating : '', asset: null };
 
 export const createGameState = (
   seed = Date.now(),

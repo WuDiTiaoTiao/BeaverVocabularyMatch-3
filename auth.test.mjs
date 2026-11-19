@@ -17,6 +17,7 @@ const createAuthFixture = ({ session = null, authError = null, getSessionError =
     signOut: 0,
     onAuthStateChange: 0,
     unsubscribe: 0,
+    updateUser: [],
     createClient: [],
   };
   let stateSession = session;
@@ -46,6 +47,16 @@ const createAuthFixture = ({ session = null, authError = null, getSessionError =
         calls.signOut += 1;
         stateSession = null;
         return { error: authError };
+      },
+      async updateUser(payload) {
+        calls.updateUser.push(payload);
+        const currentUser = stateSession?.user ?? { id: 'user-1', email: 'learner@example.com' };
+        const user = {
+          ...currentUser,
+          user_metadata: { ...(currentUser.user_metadata ?? {}), ...(payload.data ?? {}) },
+        };
+        stateSession = { ...(stateSession ?? {}), user };
+        return { data: { user }, error: authError };
       },
     },
   };
@@ -134,6 +145,27 @@ test('initialize restores an authenticated persisted session', async () => {
   });
   assert.equal(auth.getUser(), persisted.user);
   assert.equal(auth.getClient() !== null, true);
+});
+
+test('authenticated users save and clear their vocabulary selection in account metadata', async () => {
+  const session = {
+    user: { id: 'persisted', user_metadata: {} },
+    access_token: 'persisted-token',
+  };
+  const { auth, calls } = createAuthFixture({ session });
+  await auth.initialize();
+
+  await auth.saveVocabularySelection({ bookId: 'ielts', scope: 'full' });
+  assert.deepEqual(calls.updateUser[0], {
+    data: { synonym_match_vocabulary: { bookId: 'ielts', scope: 'full' } },
+  });
+  assert.deepEqual(auth.getVocabularySelection(), { bookId: 'ielts', scope: 'full' });
+
+  await auth.clearVocabularySelection();
+  assert.deepEqual(calls.updateUser[1], {
+    data: { synonym_match_vocabulary: null },
+  });
+  assert.equal(auth.getVocabularySelection(), null);
 });
 
 test('initialization failure returns guest and clears the unusable client', async () => {

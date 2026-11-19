@@ -79,6 +79,13 @@ const normalizeRemoteError = (error) => {
 };
 
 const defaultImportSupabase = () => import(SUPABASE_MODULE_URL);
+const VOCABULARY_METADATA_KEY = 'synonym_match_vocabulary';
+
+const normalizeVocabularySelection = (selection) => {
+  if (!selection || typeof selection.bookId !== 'string'
+    || !['frequent', 'full'].includes(selection.scope)) return null;
+  return { bookId: selection.bookId, scope: selection.scope };
+};
 
 export const maskEmail = (email) => {
   if (typeof email !== 'string') return '';
@@ -240,6 +247,35 @@ export const createAuthService = ({
 
   const getUser = () => user;
 
+  const getVocabularySelection = () => normalizeVocabularySelection(
+    user?.user_metadata?.[VOCABULARY_METADATA_KEY],
+  );
+
+  const updateVocabularySelection = async (selection) => {
+    const authClient = await requireClient();
+    if (!user) throw new AuthError('unknown');
+    let result;
+    try {
+      result = await authClient.auth.updateUser({
+        data: { [VOCABULARY_METADATA_KEY]: selection },
+      });
+    } catch (error) {
+      throw normalizeRemoteError(error);
+    }
+    if (result?.error) throw normalizeRemoteError(result.error);
+    const nextUser = result?.data?.user ?? user;
+    updateSession(session ? { ...session, user: nextUser } : null, nextUser);
+    return getVocabularySelection();
+  };
+
+  const saveVocabularySelection = async (selection) => {
+    const normalized = normalizeVocabularySelection(selection);
+    if (!normalized) throw new TypeError('Invalid vocabulary selection');
+    return updateVocabularySelection(normalized);
+  };
+
+  const clearVocabularySelection = async () => updateVocabularySelection(null);
+
   const getClient = () => (clientReady ? client : null);
 
   const subscribe = (listener) => {
@@ -251,5 +287,17 @@ export const createAuthService = ({
     return () => result?.data?.subscription?.unsubscribe?.();
   };
 
-  return { initialize, sendOtp, verifyOtp, signOut, getSession, getUser, getClient, subscribe };
+  return {
+    initialize,
+    sendOtp,
+    verifyOtp,
+    signOut,
+    getSession,
+    getUser,
+    getClient,
+    getVocabularySelection,
+    saveVocabularySelection,
+    clearVocabularySelection,
+    subscribe,
+  };
 };

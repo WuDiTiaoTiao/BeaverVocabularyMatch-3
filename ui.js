@@ -3,6 +3,7 @@ import {
   completePendingMatch,
   createGameState,
   getChallengeProgress,
+  getRatingPresentation,
   getTilePresentation,
   getWaveReview,
   restartGame,
@@ -10,22 +11,28 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=14';
+} from './game.js?v=16';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
-} from './vocabulary.js?v=14';
+} from './vocabulary.js?v=16';
 import {
+  chooseStartupVocabularySelection,
   clearChallengeProgress,
+  clearVocabularySelection,
   loadChallengeProgress,
+  loadVocabularySelection,
   createChallengeProgressAdapter,
   createPendingCloudDeleteAdapter,
+  saveVocabularySelection,
   shouldRebuildFromSyncRecord,
   saveChallengeProgress,
-} from './challenge-progress.js?v=14';
-import { createAuthService, getAuthErrorCopy, getResendSeconds, maskEmail } from './auth.js?v=14';
-import { createCloudProgressService } from './cloud-progress.js?v=14';
-import { createSyncController } from './sync-controller.js?v=14';
+} from './challenge-progress.js?v=16';
+import { createAuthService, getAuthErrorCopy, getResendSeconds, maskEmail } from './auth.js?v=16';
+import { createCloudProgressService } from './cloud-progress.js?v=16';
+import { createSyncController } from './sync-controller.js?v=16';
+import { createBackgroundMusicController } from './background-music.js?v=17';
+import { createSuccessSoundController } from './success-sound.js?v=18';
 
 const MATCH_ANIMATION_MS = 1_800;
 const WAVE_CLEAR_MS = 650;
@@ -49,10 +56,13 @@ const statusLine = document.querySelector('#status-line');
 const hintButton = document.querySelector('#hint-button');
 const soundButton = document.querySelector('#sound-button');
 const soundLabel = document.querySelector('#sound-label');
+const backgroundMusicElement = document.querySelector('#background-music');
+const successSoundElement = document.querySelector('#success-sound');
+const victorySoundElement = document.querySelector('#victory-sound');
 const restartButton = document.querySelector('#restart-button');
 const ratingOverlay = document.querySelector('#rating-overlay');
 const ratingLabel = document.querySelector('#rating-label');
-const ratingBonus = document.querySelector('#rating-bonus');
+const ratingEffect = document.querySelector('#rating-effect');
 const reviewModal = document.querySelector('#review-modal');
 const reviewTitle = document.querySelector('#review-title');
 const reviewSummary = document.querySelector('#review-summary');
@@ -124,6 +134,9 @@ let soundOn = true;
 let reviewOpen = false;
 let activeChallengeLoaded = false;
 let audioContext = null;
+const backgroundMusic = createBackgroundMusicController(backgroundMusicElement);
+const successSound = createSuccessSoundController(successSoundElement);
+const victorySound = createSuccessSoundController(victorySoundElement, { volume: 0.75 });
 const auth = createAuthService();
 let syncController = null;
 let syncSnapshot = { syncState: 'guest', record: null, user: null, conflict: null, error: null };
@@ -135,8 +148,8 @@ let resendTimer = null;
 let conflictWasPlaying = false;
 let controllerClient = null;
 let controllerSubscription = () => {};
+let ratingAnimationSequence = 0;
 
-const SETTINGS_KEY = 'synonym-match-vocabulary-v1';
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
 const formatScore = (score) => String(score).padStart(4, '0');
@@ -153,6 +166,21 @@ const updateAccountUi = () => {
 };
 const catalogLabel = (record) => `${catalog?.books?.[record.bookId]?.label ?? record.bookId} · ${record.scope === 'frequent' ? '高频词库' : '完整词库'}`;
 const formatUpdated = (record) => Number.isFinite(record?.clientUpdatedAt) ? new Date(record.clientUpdatedAt).toLocaleString('zh-CN') : '时间未知';
+const sameVocabularySelection = (left, right) => Boolean(
+  left && right && left.bookId === right.bookId && left.scope === right.scope
+);
+const applySetupSelection = (selection) => {
+  setupForm.elements.book.value = selection.bookId;
+  setupForm.elements.scope.value = selection.scope;
+};
+const rememberVocabularySelection = (selection) => {
+  saveVocabularySelection(window.localStorage, selection);
+  if (auth.getUser() && !sameVocabularySelection(auth.getVocabularySelection(), selection)) {
+    void auth.saveVocabularySelection(selection).catch(() => {
+      showToast('词书已保存在本机，账号同步稍后重试', 'neutral');
+    });
+  }
+};
 const renderConflict = (conflict) => {
   const wasVisible = !conflictModal.hidden;
   conflictModal.hidden = !conflict;
@@ -178,8 +206,14 @@ const rebuildFromRecord = async (record) => {
   const totalChallenges = Math.ceil(vocabulary.pairs.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
   const wave = Math.min(totalChallenges, Math.floor(record.completedPairIds.length / GAME_CONSTANTS.PAIRS_PER_WAVE) + 1);
   state = createGameState(record.seed, wave, record.score, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts });
-  setupForm.elements.book.value = record.bookId; setupForm.elements.scope.value = record.scope; activeChallengeLoaded = true;
-  setSetupOpen(false); render(); if (!syncSnapshot.conflict) startTimer(); return true;
+  const selection = { bookId: record.bookId, scope: record.scope };
+  applySetupSelection(selection);
+  rememberVocabularySelection(selection);
+  activeChallengeLoaded = true;
+  setSetupOpen(false);
+  render();
+  if (!syncSnapshot.conflict) startTimer();
+  return true;
 };
 const onSyncSnapshot = (next) => {
   syncSnapshot = next; updateAccountUi(); renderConflict(next.conflict);
@@ -300,11 +334,19 @@ const renderTiles = () => {
 const renderRating = () => {
   const pending = state.pendingMatch;
   const visible = state.status === 'resolving' && pending;
+  const wasVisible = !ratingOverlay.hidden;
   ratingOverlay.hidden = !visible;
   if (!visible) return;
+  const presentation = getRatingPresentation(pending.rating);
   ratingOverlay.dataset.rating = pending.rating;
-  ratingLabel.textContent = pending.rating;
-  ratingBonus.textContent = `+${pending.bonus}`;
+  ratingOverlay.setAttribute('aria-label', presentation.label);
+  ratingLabel.textContent = presentation.label;
+  ratingLabel.hidden = Boolean(presentation.asset);
+  ratingEffect.hidden = !presentation.asset;
+  if (presentation.asset && !wasVisible) {
+    ratingAnimationSequence += 1;
+    ratingEffect.src = `./assets/${presentation.asset}-effect.png?v=23&play=${ratingAnimationSequence}`;
+  }
 };
 
 const renderReview = () => {
@@ -350,9 +392,9 @@ const renderResult = () => {
   resultMessage.textContent = state.status === 'wave-expired'
     ? '重新开始本局时，已经消除的词对不会丢失。'
     : accuracy >= 80
-      ? '词感在线，可以开始下一本词书了。'
-      : '整本词书已经完成，可以开始下一本了。';
-  modalRestart.firstChild.textContent = state.status === 'complete' ? '选择新词书 ' : '继续挑战 ';
+      ? '词感在线，继续用这本词书巩固一轮。'
+      : '整本词书已经完成，再来一轮会记得更牢。';
+  modalRestart.firstChild.textContent = '继续挑战 ';
 };
 
 const render = () => {
@@ -455,6 +497,7 @@ const scheduleMatchResolution = () => {
       return;
     }
     if (state.status === 'wave-cleared') {
+      void victorySound.play();
       waveClearTimeout = window.setTimeout(openWaveReview, WAVE_CLEAR_MS);
     }
   }, MATCH_ANIMATION_MS);
@@ -463,11 +506,12 @@ const scheduleMatchResolution = () => {
 const handleTileClick = (event) => {
   const tileButton = event.target.closest('[data-tile-id]');
   if (!tileButton) return;
+  void backgroundMusic.start();
   state = selectTile(state, tileButton.dataset.tileId, Date.now());
   render();
 
   if (state.status === 'resolving') {
-    playTone('match');
+    void successSound.play();
     scheduleMatchResolution();
   } else if (state.lastResult === 'miss') {
     playTone('miss');
@@ -521,6 +565,9 @@ const handleContinue = () => {
 
 const handleSound = () => {
   soundOn = !soundOn;
+  void backgroundMusic.setEnabled(soundOn);
+  successSound.setEnabled(soundOn);
+  victorySound.setEnabled(soundOn);
   soundButton.setAttribute('aria-pressed', String(soundOn));
   soundLabel.textContent = soundOn ? '音效开' : '音效关';
   showToast(soundOn ? '音效已打开' : '音效已关闭');
@@ -548,43 +595,39 @@ const setSetupOpen = (open) => {
   gameFrame.inert = open;
   if (open) {
     stopTimer();
+    backgroundMusic.stop();
     setupForm.querySelector('input:checked')?.focus();
   }
 };
 
-const restoreSetupSelection = () => {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY));
-    if (catalog.books[saved.bookId]?.scopes[saved.scope]) {
-      setupForm.elements.book.value = saved.bookId;
-      setupForm.elements.scope.value = saved.scope;
-    }
-  } catch {
-    // Keep the checked defaults when storage is unavailable or invalid.
-  }
+const startFreshChallenge = async (selection) => {
+  const vocabulary = await loadVocabulary(catalog, selection.bookId, selection.scope);
+  stopTimer();
+  clearScheduledWork();
+  reviewOpen = false;
+  state = createGameState(Date.now(), 1, 0, vocabulary);
+  activeChallengeLoaded = true;
+  applySetupSelection(selection);
+  rememberVocabularySelection(selection);
+  persistActiveChallenge();
+  setSetupOpen(false);
+  render();
+  startTimer();
 };
 
 const handleStartGame = async (event) => {
   event.preventDefault();
   if (!catalog) return;
+  void backgroundMusic.start();
   const { bookId, scope } = getSelectedSetup();
   setupError.hidden = true;
   startGameButton.disabled = true;
   startGameButton.firstChild.textContent = '正在载入 ';
 
   try {
-    const vocabulary = await loadVocabulary(catalog, bookId, scope);
-    stopTimer();
-    clearScheduledWork();
-    reviewOpen = false;
-    state = createGameState(Date.now(), 1, 0, vocabulary);
-    activeChallengeLoaded = true;
-    persistActiveChallenge();
-    window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ bookId, scope }));
-    setSetupOpen(false);
-    render();
-    startTimer();
+    await startFreshChallenge({ bookId, scope });
   } catch (error) {
+    backgroundMusic.stop();
     setupError.textContent = error instanceof Error ? error.message : '词库加载失败，请稍后重试。';
     setupError.hidden = false;
   } finally {
@@ -595,6 +638,7 @@ const handleStartGame = async (event) => {
 
 const handleChangeBook = () => {
   stopTimer();
+  resetError.textContent = '浏览器未能清除进度，请检查存储权限后重试。';
   resetError.hidden = true;
   resetModal.hidden = false;
   gameFrame.inert = true;
@@ -615,6 +659,15 @@ const handleConfirmReset = async () => {
     resetConfirm.disabled = false;
     return;
   }
+  try {
+    if (auth.getUser()) await auth.clearVocabularySelection();
+    clearVocabularySelection(window.localStorage);
+  } catch {
+    resetError.textContent = '词书偏好同步失败，请检查网络后重试。';
+    resetError.hidden = false;
+    resetConfirm.disabled = false;
+    return;
+  }
   clearScheduledWork();
   reviewOpen = false;
   reviewModal.hidden = true;
@@ -625,14 +678,22 @@ const handleConfirmReset = async () => {
   resetConfirm.disabled = false;
 };
 
-const handleResultAction = () => {
+const handleResultAction = async () => {
   if (state.status !== 'complete') {
     handleRestart();
     return;
   }
+  const selection = { bookId: state.bookId, scope: state.scope };
   resultModal.hidden = true;
-  updateSetupCounts();
-  setSetupOpen(true);
+  modalRestart.disabled = true;
+  try {
+    await startFreshChallenge(selection);
+  } catch {
+    resultModal.hidden = false;
+    showToast('词库加载失败，请稍后重试', 'neutral');
+  } finally {
+    modalRestart.disabled = false;
+  }
 };
 
 const restoreActiveChallenge = async () => {
@@ -652,8 +713,8 @@ const restoreActiveChallenge = async () => {
     correctMatches: saved.correctMatches,
     attempts: saved.attempts,
   });
-  setupForm.elements.book.value = saved.bookId;
-  setupForm.elements.scope.value = saved.scope;
+  applySetupSelection(saved);
+  rememberVocabularySelection(saved);
   activeChallengeLoaded = true;
   setSetupOpen(false);
   render();
@@ -722,14 +783,29 @@ const initializeVocabularySetup = async () => {
     const [catalogResult] = await Promise.allSettled([loadVocabularyCatalog(), auth.initialize()]);
     if (catalogResult.status === 'rejected') throw catalogResult.reason;
     catalog = catalogResult.value;
-    restoreSetupSelection();
+    const localSelection = loadVocabularySelection(window.localStorage, catalog);
+    const accountSelection = auth.getVocabularySelection();
+    const preferredSelection = chooseStartupVocabularySelection(catalog, {
+      accountSelection,
+      localSelection,
+    });
+    if (preferredSelection) applySetupSelection(preferredSelection);
     updateSetupCounts();
     setupError.hidden = true;
     startGameButton.disabled = false;
     createController();
     const snapshot = await syncController.initialize();
-    if (!snapshot.record) await restoreActiveChallenge();
-    else await rebuildFromRecord(snapshot.record);
+    let challengeReady = false;
+    if (snapshot.record) challengeReady = await rebuildFromRecord(snapshot.record);
+    else challengeReady = await restoreActiveChallenge();
+    if (!challengeReady) {
+      const selection = chooseStartupVocabularySelection(catalog, {
+        accountSelection: auth.getVocabularySelection(),
+        localSelection,
+      });
+      if (selection) await startFreshChallenge(selection);
+      else setSetupOpen(true);
+    }
     authUnsubscribe = auth.subscribe(() => {
       updateAccountUi();
       if (catalog) void Promise.resolve().then(() => { createController(); return syncController.initialize(); }).catch(() => {});
@@ -768,5 +844,5 @@ window.addEventListener('online', handleOnline);
 window.addEventListener('offline', handleOffline);
 
 render();
-setSetupOpen(true);
+setSetupOpen(false);
 initializeVocabularySetup();

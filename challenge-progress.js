@@ -1,4 +1,42 @@
 export const CHALLENGE_PROGRESS_KEY = 'synonym-match-challenge-v1';
+export const VOCABULARY_SELECTION_KEY = 'synonym-match-vocabulary-v1';
+
+const normalizeVocabularySelection = (selection, catalog) => {
+  if (!selection || typeof selection.bookId !== 'string' || typeof selection.scope !== 'string') return null;
+  if (!catalog?.books?.[selection.bookId]?.scopes?.[selection.scope]) return null;
+  return { bookId: selection.bookId, scope: selection.scope };
+};
+
+export const loadVocabularySelection = (storage, catalog) => {
+  try {
+    const serialized = storage.getItem(VOCABULARY_SELECTION_KEY);
+    return serialized ? normalizeVocabularySelection(JSON.parse(serialized), catalog) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveVocabularySelection = (storage, selection) => {
+  if (!selection || typeof selection.bookId !== 'string'
+    || !['frequent', 'full'].includes(selection.scope)) {
+    throw new TypeError('Invalid vocabulary selection');
+  }
+  const normalized = { bookId: selection.bookId, scope: selection.scope };
+  storage.setItem(VOCABULARY_SELECTION_KEY, JSON.stringify(normalized));
+  return normalized;
+};
+
+export const clearVocabularySelection = (storage) => {
+  storage.removeItem(VOCABULARY_SELECTION_KEY);
+};
+
+export const chooseStartupVocabularySelection = (catalog, {
+  activeRecord = null,
+  accountSelection = null,
+  localSelection = null,
+} = {}) => normalizeVocabularySelection(activeRecord, catalog)
+  ?? normalizeVocabularySelection(accountSelection, catalog)
+  ?? normalizeVocabularySelection(localSelection, catalog);
 
 const normalizeRecord = (record, vocabulary) => {
   if (!record || ![1, 2].includes(record.version)) return null;

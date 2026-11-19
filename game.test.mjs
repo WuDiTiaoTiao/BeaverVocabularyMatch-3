@@ -14,6 +14,7 @@ import {
   tick,
   useHint,
 } from './game.js';
+import * as game from './game.js';
 
 const TEST_VOCABULARY = {
   bookId: 'ielts',
@@ -200,7 +201,7 @@ test('a correct pair enters a resolving phase before it is cleared', () => {
   assert.deepEqual(resolving.pendingMatch, {
     pairId: pair,
     tileIds: ids,
-    rating: 'PERFECT',
+    rating: 'UNBELIEVABLE',
     bonus: 100,
     durationMs: 1_500,
   });
@@ -211,11 +212,44 @@ test('a correct pair enters a resolving phase before it is cleared', () => {
   assert.equal(cleared.score, 100);
 });
 
-test('performance rating uses the reference timing tiers', () => {
-  assert.deepEqual(getPerformanceRating(2_000), { label: 'PERFECT', bonus: 100 });
-  assert.deepEqual(getPerformanceRating(2_001), { label: 'GREAT', bonus: 70 });
-  assert.deepEqual(getPerformanceRating(4_000), { label: 'GREAT', bonus: 70 });
-  assert.deepEqual(getPerformanceRating(4_001), { label: 'GOOD', bonus: 40 });
+test('performance rating uses five inclusive elapsed-time tiers', () => {
+  assert.equal(getPerformanceRating(10_000).label, 'UNBELIEVABLE');
+  assert.equal(getPerformanceRating(10_001).label, 'AMAZING');
+  assert.equal(getPerformanceRating(20_000).label, 'AMAZING');
+  assert.equal(getPerformanceRating(20_001).label, 'EXCELLENT');
+  assert.equal(getPerformanceRating(30_000).label, 'EXCELLENT');
+  assert.equal(getPerformanceRating(30_001).label, 'PERFECT');
+  assert.equal(getPerformanceRating(40_000).label, 'PERFECT');
+  assert.equal(getPerformanceRating(40_001).label, 'GOOD');
+  assert.equal(getPerformanceRating(50_000).label, 'GOOD');
+  assert.equal(getPerformanceRating(59_000).label, 'GOOD');
+});
+
+test('rating presentation maps every tier to its supplied animation without score copy', () => {
+  assert.deepEqual(game.getRatingPresentation('UNBELIEVABLE'), {
+    label: 'Unbelievable!',
+    asset: 'unbelievable',
+  });
+  assert.deepEqual(game.getRatingPresentation('AMAZING'), {
+    label: 'Amazing!',
+    asset: 'amazing',
+  });
+  assert.deepEqual(game.getRatingPresentation('EXCELLENT'), {
+    label: 'Excellent!',
+    asset: 'excellent',
+  });
+  assert.deepEqual(game.getRatingPresentation('PERFECT'), {
+    label: 'Perfect!',
+    asset: 'perfect',
+  });
+  assert.deepEqual(game.getRatingPresentation('GREAT'), {
+    label: 'GREAT',
+    asset: null,
+  });
+  assert.deepEqual(game.getRatingPresentation('GOOD'), {
+    label: 'Good!',
+    asset: 'good',
+  });
 });
 
 test('tile presentation hides gloss until the matching animation', () => {

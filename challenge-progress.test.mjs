@@ -15,6 +15,7 @@ import {
   saveChallengeProgress,
   shouldRebuildFromSyncRecord,
 } from './challenge-progress.js';
+import * as challengeProgress from './challenge-progress.js';
 
 test('local sync echo is equivalent to the live challenge while remote changes are adoptable', () => {
   const live = {
@@ -75,6 +76,58 @@ const createStorage = () => {
     removeItem: (key) => values.delete(key),
   };
 };
+
+const CATALOG = {
+  books: {
+    postgrad: { scopes: { frequent: {}, full: {} } },
+    ielts: { scopes: { frequent: {}, full: {} } },
+  },
+};
+
+test('vocabulary selection survives after the active challenge is cleared', () => {
+  const storage = createStorage();
+  challengeProgress.saveVocabularySelection(storage, { bookId: 'ielts', scope: 'full' });
+  challengeProgress.clearChallengeProgress(storage);
+
+  assert.deepEqual(challengeProgress.loadVocabularySelection(storage, CATALOG), {
+    bookId: 'ielts',
+    scope: 'full',
+  });
+});
+
+test('invalid or unavailable saved vocabulary selections do not skip setup', () => {
+  const storage = createStorage();
+  storage.setItem('synonym-match-vocabulary-v1', JSON.stringify({ bookId: 'unknown', scope: 'full' }));
+  assert.equal(challengeProgress.loadVocabularySelection(storage, CATALOG), null);
+
+  storage.setItem('synonym-match-vocabulary-v1', JSON.stringify({ bookId: 'ielts', scope: 'other' }));
+  assert.equal(challengeProgress.loadVocabularySelection(storage, CATALOG), null);
+
+  challengeProgress.clearVocabularySelection(storage);
+  assert.equal(storage.getItem('synonym-match-vocabulary-v1'), null);
+});
+
+test('startup selection prefers active progress, then account metadata, then local storage', () => {
+  const localSelection = { bookId: 'postgrad', scope: 'frequent' };
+  const accountSelection = { bookId: 'ielts', scope: 'full' };
+  const activeRecord = { bookId: 'postgrad', scope: 'full' };
+
+  assert.deepEqual(challengeProgress.chooseStartupVocabularySelection(CATALOG, {
+    activeRecord,
+    accountSelection,
+    localSelection,
+  }), activeRecord);
+  assert.deepEqual(challengeProgress.chooseStartupVocabularySelection(CATALOG, {
+    accountSelection,
+    localSelection,
+  }), accountSelection);
+  assert.deepEqual(challengeProgress.chooseStartupVocabularySelection(CATALOG, {
+    localSelection,
+  }), localSelection);
+  assert.equal(challengeProgress.chooseStartupVocabularySelection(CATALOG, {
+    accountSelection: { bookId: 'missing', scope: 'full' },
+  }), null);
+});
 
 test('saves and restores an unfinished vocabulary challenge', () => {
   const storage = createStorage();

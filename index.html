@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#107f86" />
     <title>词汇消消乐 · 英语同义词</title>
-    <link rel="stylesheet" href="./styles.css?v=14" />
+    <link rel="stylesheet" href="./styles.css?v=22" />
   </head>
   <body>
     <div class="page-shell" id="app">
@@ -39,18 +39,18 @@
         </header>
 
         <div class="game-body">
-          <aside class="book-progress-panel" aria-label="当前词书挑战进度">
+          <aside class="book-progress-panel" aria-label="当前词书配对与挑战进度">
             <p class="book-progress-title">词书总进度</p>
             <div class="book-progress-item">
               <div>
-                <span>已完成配对</span>
+                <span>配对进度</span>
                 <strong id="book-pair-progress">0 / 0</strong>
               </div>
               <div class="book-progress-track" aria-hidden="true"><span id="book-pair-fill"></span></div>
             </div>
             <div class="book-progress-item">
               <div>
-                <span>已完成挑战</span>
+                <span>挑战进度</span>
                 <strong id="book-challenge-progress">0 / 0</strong>
               </div>
               <div class="book-progress-track" aria-hidden="true"><span id="book-challenge-fill"></span></div>
@@ -98,12 +98,8 @@
 
           <div class="status-line" id="status-line" aria-live="polite">点击任意词块开始配对</div>
           <div class="rating-overlay" id="rating-overlay" hidden aria-live="assertive">
-            <span class="rating-rays" aria-hidden="true"></span>
+            <img class="rating-effect" id="rating-effect" alt="" hidden />
             <strong id="rating-label">PERFECT</strong>
-            <span id="rating-bonus">+100</span>
-            <div class="rating-sparks" aria-hidden="true">
-              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-            </div>
           </div>
           <div class="tile-grid" id="game-board" role="grid" aria-label="英文词块"></div>
             </section>
@@ -131,7 +127,7 @@
       </main>
     </div>
 
-    <div class="setup-backdrop" id="setup-modal">
+    <div class="setup-backdrop" id="setup-modal" hidden>
       <section class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title">
         <header class="setup-header">
           <div class="setup-mark" aria-hidden="true">词</div>
@@ -324,6 +320,9 @@
     </div>
 
     <div class="toast-layer" id="toast-layer" aria-live="polite" aria-atomic="true"></div>
-    <script type="module" src="./ui.js?v=14"></script>
+    <audio id="background-music" src="./assets/study-session-lofi.mp3?v=18" preload="auto" loop aria-hidden="true"></audio>
+    <audio id="success-sound" src="./assets/dingdong-sound.mp3?v=18" preload="auto" aria-hidden="true"></audio>
+    <audio id="victory-sound" src="./assets/round-victory-sound.mp3?v=19" preload="auto" aria-hidden="true"></audio>
+    <script type="module" src="./ui.js?v=23"></script>
   </body>
 </html>
