@@ -267,7 +267,7 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   transform: translate(-50%, -50%);
 }
 .rating-overlay[hidden] { display: none; }
-.rating-effect { display: block; width: auto; max-width: min(308px, 58.8vw); max-height: 154px; object-fit: contain; transform-origin: center; animation: rating-pop 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.rating-effect { display: block; width: auto; max-width: min(308px, 58.8vw); max-height: 154px; object-fit: contain; transform-origin: center; animation: rating-pop 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .rating-effect[hidden] { display: none; }
 .rating-overlay strong { position: relative; z-index: 2; color: var(--lemon); text-shadow: 0 5px 0 #b35a2a, 0 10px 24px rgba(0,0,0,0.34); font-size: 54px; font-style: italic; font-weight: 950; letter-spacing: 0.03em; line-height: 0.95; }
 .rating-overlay[data-rating="GREAT"] strong { color: #78e8c0; }
@@ -510,8 +510,10 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   .book-progress-item span { font-size: 8px; }
   .book-progress-item strong { font-size: 10px; }
   .book-progress-track { width: 50%; height: 4px; }
+  .book-progress-item:first-of-type { grid-template-columns: minmax(max-content, 50%); }
   .book-progress-item:first-of-type > div:first-child,
-  .book-progress-item:first-of-type .book-progress-track { justify-self: start; }
+  .book-progress-item:first-of-type .book-progress-track { width: 100%; justify-self: start; }
+  .book-progress-item:first-of-type > div:first-child { white-space: nowrap; }
   .book-progress-item:last-of-type > div:first-child,
   .book-progress-item:last-of-type .book-progress-track { justify-self: end; }
   .hud { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 4px; padding: 6px; border-radius: 11px; }

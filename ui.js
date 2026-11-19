@@ -35,7 +35,7 @@ import { createBackgroundMusicController } from './background-music.js?v=17';
 import { createSuccessSoundController } from './success-sound.js?v=18';
 
 const MATCH_ANIMATION_MS = 2_000;
-const RATING_ANIMATION_MS = 750;
+const RATING_ANIMATION_MS = 850;
 const WAVE_CLEAR_MS = 650;
 
 const board = document.querySelector('#game-board');
