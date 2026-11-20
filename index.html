@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#397ccc" />
-    <title>词汇消消乐 · 英语同义词</title>
+    <title>海狸单词 · 英语同义词</title>
     <script src="./theme.js?v=31"></script>
     <link rel="stylesheet" href="./styles.css?v=32" />
   </head>
@@ -19,7 +19,7 @@
             <div class="brand-mark" aria-hidden="true">词</div>
             <div>
               <p class="eyebrow">ENGLISH · SYNONYM MATCH</p>
-              <h1>词汇消消乐</h1>
+              <h1>海狸单词</h1>
               <p class="subtitle" id="game-subtitle">英语考试同义词配对挑战</p>
             </div>
           </div>
@@ -64,10 +64,6 @@
             <span class="hud-label">当前挑战</span>
             <strong id="wave">第 1 局</strong>
           </div>
-          <div class="hud-stat score-stat">
-            <span class="hud-label">得分</span>
-            <strong id="score">0000</strong>
-          </div>
           <div class="timer-card" id="timer-card">
             <div class="timer-copy">
               <span class="hud-label">剩余时间</span>
@@ -80,7 +76,7 @@
             <div class="progress-row">
               <div class="progress-copy">
                 <span id="progress">本局已配对 0 / 6</span>
-                <span class="progress-tip">找到同义词，连击得分更高</span>
+              <span class="progress-tip">找到同义词，保持配对节奏</span>
               </div>
               <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
             </div>
@@ -110,7 +106,7 @@
             <button class="action-button action-button-primary" id="hint-button" type="button">
               <span class="button-icon" aria-hidden="true">✦</span>
               <span>提示</span>
-              <span class="button-cost">-25</span>
+              <span class="button-cost">剩3次</span>
             </button>
             <button class="action-button" id="sound-button" type="button" aria-pressed="false">
               <span class="button-icon" aria-hidden="true">♪</span>
@@ -195,6 +191,7 @@
             <p class="section-kicker">CHALLENGE COMPLETE</p>
             <h2 id="review-title">第 1 局完成</h2>
             <p id="review-summary">本局回顾 · 15 个词</p>
+            <p class="review-rating" id="review-rating" aria-label="本局星级">★★★★★ · 0 秒</p>
           </div>
           <span class="review-badge">词汇回顾</span>
         </header>
@@ -218,14 +215,14 @@
     <div class="result-backdrop" id="result-modal" hidden>
       <section class="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
         <div class="result-spark" aria-hidden="true">✦</div>
-        <p class="section-kicker">SESSION COMPLETE</p>
+        <p class="section-kicker" id="result-kicker">SESSION COMPLETE</p>
         <h2 id="result-title">这一轮，完成得很漂亮</h2>
         <p class="result-message" id="result-message">继续保持你的词感。</p>
         <div class="result-stats">
-          <div><span>总得分</span><strong id="final-score">0000</strong></div>
-          <div><span>正确率</span><strong id="final-accuracy">0%</strong></div>
+          <div><span>本局星级</span><strong id="final-stars">★★★★★</strong></div>
+          <div><span>完成用时</span><strong id="final-duration">0 秒</strong></div>
         </div>
-        <button class="modal-button" id="modal-restart" type="button">继续挑战 <span aria-hidden="true">↗</span></button>
+        <button class="modal-button" id="modal-restart" type="button">再试一次 <span aria-hidden="true">↗</span></button>
       </section>
     </div>
 
@@ -328,6 +325,6 @@
     <audio id="background-music" src="./assets/study-session-lofi.mp3?v=18" preload="auto" loop aria-hidden="true"></audio>
     <audio id="success-sound" src="./assets/dingdong-sound.mp3?v=18" preload="auto" aria-hidden="true"></audio>
     <audio id="victory-sound" src="./assets/round-victory-sound.mp3?v=19" preload="auto" aria-hidden="true"></audio>
-    <script type="module" src="./ui.js?v=35"></script>
+    <script type="module" src="./ui.js?v=37"></script>
   </body>
 </html>

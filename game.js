@@ -14,7 +14,8 @@ const GAME_MODES = Object.freeze({
   }),
 });
 const DEFAULT_MODE = 'desktop';
-const HINT_COST = 25;
+const HINT_FREE_USES = 3;
+const HINT_TIME_PENALTY_SECONDS = 10;
 
 const getModeConfig = (mode = DEFAULT_MODE) => GAME_MODES[mode] ?? GAME_MODES[DEFAULT_MODE];
 
@@ -241,8 +242,16 @@ export const getPerformanceRating = (durationMs) => {
         : durationMs <= 8_000
           ? 'PERFECT'
           : 'GOOD';
-  const bonus = durationMs <= 2_000 ? 100 : durationMs <= 4_000 ? 70 : 40;
-  return { label, bonus };
+  return { label };
+};
+
+export const getRoundStars = (elapsedSeconds) => {
+  const seconds = Math.max(0, Number(elapsedSeconds) || 0);
+  if (seconds <= 10) return 5;
+  if (seconds <= 15) return 4;
+  if (seconds <= 25) return 3;
+  if (seconds <= 45) return 2;
+  return 1;
 };
 
 const RATING_PRESENTATIONS = {
@@ -259,7 +268,7 @@ export const getRatingPresentation = (rating) => RATING_PRESENTATIONS[rating]
 export const createGameState = (
   seed = Date.now(),
   wave = 1,
-  score = 0,
+  _legacyScore = 0,
   vocabulary = DEFAULT_VOCABULARY,
   completedBookPairIds = [],
   sessionStats = {},
@@ -288,8 +297,8 @@ export const createGameState = (
     pendingMatch: null,
     hintTileId: null,
     wrongTileIds: [],
+    hintsUsed: 0,
     lastResult: null,
-    score,
     combo: 0,
     correctMatches: Math.max(0, sessionStats.correctMatches ?? 0),
     attempts: Math.max(0, sessionStats.attempts ?? 0),
@@ -350,13 +359,11 @@ export const selectTile = (state, tileId, nowMs = Date.now()) => {
         pairId: tile.pairId,
         tileIds: [state.selectedTileId, tileId],
         rating: rating.label,
-        bonus: rating.bonus,
         durationMs,
       },
       hintTileId: null,
       wrongTileIds: [],
       lastResult: 'match',
-      score: state.score + rating.bonus,
       combo,
       attempts,
       status: 'resolving',
@@ -431,14 +438,29 @@ export const getTilePresentation = (state, tile) => {
 
 export const useHint = (state) => {
   if (state.status !== 'playing') return state;
+  const hintsUsed = (state.hintsUsed ?? 0) + 1;
+  const timeLeft = Math.max(
+    0,
+    state.timeLeft - (hintsUsed > HINT_FREE_USES ? HINT_TIME_PENALTY_SECONDS : 0),
+  );
+  const expired = timeLeft === 0;
+  const applyHintAttempt = (changes) => clone(state, {
+    ...changes,
+    hintsUsed,
+    timeLeft,
+    status: expired ? 'wave-expired' : state.status,
+    selectedTileId: expired ? null : changes.selectedTileId !== undefined ? changes.selectedTileId : state.selectedTileId,
+    selectedAtMs: expired ? null : changes.selectedAtMs !== undefined ? changes.selectedAtMs : state.selectedAtMs,
+    hintTileId: expired ? null : changes.hintTileId !== undefined ? changes.hintTileId : state.hintTileId,
+    lastResult: expired ? 'expired' : changes.lastResult,
+  });
   const selectedTile = state.tiles.find((tile) => tile.id === state.selectedTileId);
   if (selectedTile?.distractor) {
-    return clone(state, {
+    return applyHintAttempt({
       selectedTileId: null,
       selectedAtMs: null,
       hintTileId: null,
       wrongTileIds: [selectedTile.id],
-      score: Math.max(0, state.score - HINT_COST),
       lastResult: 'unpairable',
     });
   }
@@ -449,9 +471,8 @@ export const useHint = (state) => {
     ? state.tiles.find((tile) => tile.pairId === selectedTile.pairId && tile.id !== selectedTile.id)
     : validTile;
   if (!targetTile) return state;
-  return clone(state, {
+  return applyHintAttempt({
     hintTileId: targetTile.id,
-    score: Math.max(0, state.score - HINT_COST),
     lastResult: 'hint',
   });
 };
@@ -475,7 +496,7 @@ export const startNextWave = (state) => {
     ...createGameState(
       state.seed + state.wave * 101,
       state.wave + 1,
-      state.score,
+      0,
       state.vocabulary,
       state.completedBookPairIds,
       { correctMatches: state.correctMatches, attempts: state.attempts },
@@ -490,7 +511,7 @@ export const restartGame = (state) => {
   return createGameState(
     state.seed,
     wave,
-    state.score,
+    0,
     state.vocabulary,
     state.completedBookPairIds,
     { correctMatches: state.correctMatches, attempts: state.attempts },
@@ -503,5 +524,6 @@ export const getGameModeConfig = (mode) => ({ ...getModeConfig(mode) });
 export const GAME_CONSTANTS = {
   ROUND_SECONDS,
   ...GAME_MODES.desktop,
-  HINT_COST,
+  HINT_FREE_USES,
+  HINT_TIME_PENALTY_SECONDS,
 };

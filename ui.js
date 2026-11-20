@@ -4,6 +4,7 @@ import {
   createGameState,
   getGameModeConfig,
   getChallengeProgress,
+  getRoundStars,
   getRatingPresentation,
   getTilePresentation,
   getWaveReview,
@@ -12,7 +13,7 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=35';
+} from './game.js?v=37';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
@@ -41,7 +42,6 @@ const WAVE_CLEAR_MS = 650;
 
 const board = document.querySelector('#game-board');
 const playfield = document.querySelector('.playfield');
-const scoreEl = document.querySelector('#score');
 const waveEl = document.querySelector('#wave');
 const timerEl = document.querySelector('#timer');
 const timerFill = document.querySelector('#timer-fill');
@@ -56,6 +56,7 @@ const comboEl = document.querySelector('#combo');
 const comboChip = document.querySelector('#combo-chip');
 const statusLine = document.querySelector('#status-line');
 const hintButton = document.querySelector('#hint-button');
+const hintCost = hintButton.querySelector?.('.button-cost') ?? { textContent: '' };
 const soundButton = document.querySelector('#sound-button');
 const soundLabel = document.querySelector('#sound-label');
 const backgroundMusicElement = document.querySelector('#background-music');
@@ -68,12 +69,14 @@ const ratingEffect = document.querySelector('#rating-effect');
 const reviewModal = document.querySelector('#review-modal');
 const reviewTitle = document.querySelector('#review-title');
 const reviewSummary = document.querySelector('#review-summary');
+const reviewRating = document.querySelector('#review-rating') ?? { textContent: '', setAttribute() {} };
 const reviewPairs = document.querySelector('#review-pairs');
 const reviewExtras = document.querySelector('#review-extras');
 const reviewContinue = document.querySelector('#review-continue');
 const resultModal = document.querySelector('#result-modal');
-const finalScore = document.querySelector('#final-score');
-const finalAccuracy = document.querySelector('#final-accuracy');
+const resultKicker = document.querySelector('#result-kicker') ?? { textContent: '' };
+const finalStars = document.querySelector('#final-stars') ?? { textContent: '' };
+const finalDuration = document.querySelector('#final-duration') ?? { textContent: '' };
 const resultMessage = document.querySelector('#result-message');
 const resultTitle = document.querySelector('#result-title');
 const modalRestart = document.querySelector('#modal-restart');
@@ -170,8 +173,6 @@ const ratingPreloads = ['unbelievable', 'amazing', 'excellent', 'perfect', 'good
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
-const formatScore = (score) => String(score).padStart(4, '0');
-
 const getLocalAdapter = () => createChallengeProgressAdapter(window.localStorage);
 const getPendingDeleteAdapter = () => createPendingCloudDeleteAdapter(window.localStorage);
 const syncStatusCopy = (syncState) => ({ guest: '本机保存', initializing: '同步中', syncing: '同步中', synced: '已同步', offline: '离线保存', error: '同步失败', conflict: '待选择进度' }[syncState] ?? '本机保存');
@@ -225,7 +226,7 @@ const rebuildFromRecord = async (record) => {
   const modeConfig = getGameModeConfig(mode);
   const totalChallenges = Math.ceil(vocabulary.pairs.length / modeConfig.PAIRS_PER_WAVE);
   const wave = Math.min(totalChallenges, Math.floor(record.completedPairIds.length / modeConfig.PAIRS_PER_WAVE) + 1);
-  state = createGameState(record.seed, wave, record.score, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts }, { mode });
+  state = createGameState(record.seed, wave, 0, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts }, { mode });
   const selection = { bookId: record.bookId, scope: record.scope };
   applySetupSelection(selection);
   rememberVocabularySelection(selection);
@@ -254,7 +255,7 @@ const createController = () => {
 const getStatusCopy = (currentState) => {
   if (currentState.status === 'resolving') return '配对成功，记住刚刚出现的中文释义';
   if (currentState.status === 'wave-cleared') return '本组完成，正在整理词汇回顾';
-  if (currentState.status === 'wave-expired') return '时间到，先把刚才的词读一遍';
+  if (currentState.status === 'wave-expired') return '本局失败，点击再试一次重新挑战';
   if (currentState.status === 'complete') return '整本词书挑战完成，看看你的最终成绩';
   if (currentState.lastResult === 'match') return '配对成功！继续保持连击';
   if (currentState.lastResult === 'miss') return '意思不太一样，再试试别的组合';
@@ -410,8 +411,12 @@ const renderReview = () => {
   const review = getWaveReview(state);
   const challengeProgress = getChallengeProgress(state);
   const bookComplete = challengeProgress.completedPairs === challengeProgress.totalPairs;
+  const elapsedSeconds = GAME_CONSTANTS.ROUND_SECONDS - state.timeLeft;
+  const stars = getRoundStars(elapsedSeconds);
   reviewTitle.textContent = `第 ${state.wave} 局完成`;
-  reviewSummary.textContent = `本局回顾 · ${review.pairs.length} 组同义词 · ${review.totalWords} 个词`;
+  reviewSummary.textContent = `本局回顾 · ${review.pairs.length} 组同义词 · ${review.totalWords} 个词 · ${stars} 星`;
+  reviewRating.textContent = `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} · ${elapsedSeconds} 秒`;
+  reviewRating.setAttribute('aria-label', `本局 ${stars} 星，用时 ${elapsedSeconds} 秒`);
   reviewContinue.firstChild.textContent = bookComplete ? '查看总成绩 ' : '下一局 ';
 
   const pairFragment = document.createDocumentFragment();
@@ -438,16 +443,19 @@ const renderResult = () => {
   resultModal.hidden = !visible;
   if (!visible) return;
 
-  const accuracy = state.attempts ? Math.round((state.correctMatches / state.attempts) * 100) : 0;
-  resultTitle.textContent = state.status === 'wave-expired' ? '时间到，进度已经保存' : '这本词书，挑战完成';
-  finalScore.textContent = formatScore(state.score);
-  finalAccuracy.textContent = `${accuracy}%`;
-  resultMessage.textContent = state.status === 'wave-expired'
-    ? '重新开始本局时，已经消除的词对不会丢失。'
+  const expired = state.status === 'wave-expired';
+  const elapsedSeconds = GAME_CONSTANTS.ROUND_SECONDS - state.timeLeft;
+  const stars = getRoundStars(elapsedSeconds);
+  resultKicker.textContent = expired ? 'ROUND FAILED' : 'SESSION COMPLETE';
+  resultTitle.textContent = expired ? '本局失败' : '这本词书，挑战完成';
+  finalStars.textContent = expired ? '—' : `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}`;
+  finalDuration.textContent = expired ? '倒计时结束' : `${elapsedSeconds} 秒`;
+  resultMessage.textContent = expired
+    ? '倒计时已结束，已完成的词书进度会保留。点击再试一次重新拉起本局。'
     : accuracy >= 80
       ? '词感在线，继续用这本词书巩固一轮。'
       : '整本词书已经完成，再来一轮会记得更牢。';
-  modalRestart.firstChild.textContent = '继续挑战 ';
+  modalRestart.firstChild.textContent = expired ? '再试一次 ' : '继续挑战 ';
 };
 
 const render = () => {
@@ -462,7 +470,6 @@ const render = () => {
   const completedChallengeProgress = challengeProgress.totalChallenges
     ? (challengeProgress.completedChallenges / challengeProgress.totalChallenges) * 100
     : 0;
-  scoreEl.textContent = formatScore(state.score);
   waveEl.textContent = `第 ${state.wave} / ${state.totalWaves} 局`;
   timerEl.textContent = String(state.timeLeft).padStart(2, '0');
   timerFill.style.width = `${timeProgress}%`;
@@ -479,6 +486,12 @@ const render = () => {
   gameSubtitle.textContent = `${state.vocabularyLabel}同义词配对挑战`;
   footerCopy.textContent = `当前使用 ${state.vocabularyLabel}，每局 ${modeConfig.TILES_PER_WAVE} 个词块。`;
   statusLine.textContent = getStatusCopy(state);
+  const hintsUsed = state.hintsUsed ?? 0;
+  const freeHintsRemaining = Math.max(0, GAME_CONSTANTS.HINT_FREE_USES - hintsUsed);
+  hintCost.textContent = freeHintsRemaining > 0 ? `剩${freeHintsRemaining}次` : '-10s';
+  hintButton.setAttribute('aria-label', freeHintsRemaining > 0
+    ? `提示，剩余${freeHintsRemaining}次免费提示`
+    : '提示，使用一次扣除10秒');
   hintButton.disabled = state.status !== 'playing' || state.hintTileId !== null || state.wrongTileIds.length > 0;
   board.setAttribute('aria-busy', String(state.status !== 'playing'));
   playfield.classList.toggle('is-wave-cleared', state.status === 'wave-cleared');
@@ -576,11 +589,18 @@ const handleHint = () => {
   const nextState = useHint(state);
   if (nextState === state) return;
   state = nextState;
+  if (state.status !== 'playing') stopTimer();
   persistActiveChallenge();
   render();
   const unpairable = state.lastResult === 'unpairable';
+  const hintWasPenalized = state.hintsUsed > GAME_CONSTANTS.HINT_FREE_USES;
   playTone(unpairable ? 'miss' : 'hint');
-  showToast(unpairable ? '这个词无法配对，扣除 25 分' : '提示已使用，扣除 25 分', unpairable ? 'neutral' : 'hint');
+  showToast(
+    unpairable
+      ? `这个词无法配对${hintWasPenalized ? `，并扣除 ${GAME_CONSTANTS.HINT_TIME_PENALTY_SECONDS} 秒` : ''}`
+      : `提示已使用${hintWasPenalized ? `，并扣除 ${GAME_CONSTANTS.HINT_TIME_PENALTY_SECONDS} 秒` : ''}`,
+    unpairable ? 'neutral' : 'hint',
+  );
   if (hintTimeout !== null) window.clearTimeout(hintTimeout);
   hintTimeout = window.setTimeout(() => {
     if (state.hintTileId !== null || state.wrongTileIds.length > 0) {
@@ -770,7 +790,7 @@ const restoreActiveChallenge = async () => {
   const completedChallenges = Math.floor(saved.completedPairIds.length / modeConfig.PAIRS_PER_WAVE);
   const totalChallenges = Math.ceil(vocabulary.pairs.length / modeConfig.PAIRS_PER_WAVE);
   const wave = Math.min(totalChallenges, completedChallenges + 1);
-  state = createGameState(saved.seed, wave, saved.score, vocabulary, saved.completedPairIds, {
+  state = createGameState(saved.seed, wave, 0, vocabulary, saved.completedPairIds, {
     correctMatches: saved.correctMatches,
     attempts: saved.attempts,
   }, { mode });

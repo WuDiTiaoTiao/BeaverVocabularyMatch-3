@@ -197,7 +197,6 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
 
 .hud-stat { min-width: 124px; padding: 4px 10px; }
 .hud-stat strong { display: block; margin-top: 4px; font-size: 19px; line-height: 1; }
-.score-stat strong { color: var(--coral-dark); font-variant-numeric: tabular-nums; }
 .timer-card { display: flex; min-width: min(360px, 48%); align-items: center; gap: 20px; padding: 8px 12px 8px 16px; border-radius: 14px; background: var(--paper); }
 .timer-copy strong { display: block; margin-top: 3px; color: var(--coral-dark); font-size: 26px; line-height: 0.95; font-variant-numeric: tabular-nums; }
 .timer-copy small { margin-left: 3px; font-size: 11px; }
@@ -359,6 +358,7 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
 .review-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 12px; color: var(--accent); background: var(--accent-soft); font-size: 23px; }
 .review-header h2 { margin-top: 4px; font-size: 26px; letter-spacing: -0.03em; }
 .review-header #review-summary { margin-top: 5px; color: var(--ink-soft); font-size: 12px; font-weight: 650; }
+.review-rating { margin-top: 7px; color: var(--accent-dark); font-size: 14px; font-weight: 900; letter-spacing: 0.08em; }
 .review-badge { padding: 7px 10px; border: 1px solid rgba(var(--accent-rgb), 0.16); border-radius: 99px; color: var(--accent-dark); background: rgba(255,255,255,0.62); font-size: 11px; font-weight: 800; }
 .review-content { display: grid; gap: 8px; overflow: auto; padding: 14px 18px; overscroll-behavior: contain; }
 .review-content h3 { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -545,7 +545,6 @@ h1 { margin-top: 5px; font-size: 40px; letter-spacing: -0.04em; line-height: 0.9
   .book-progress-item:last-of-type > div:first-child,
   .book-progress-item:last-of-type .book-progress-track { justify-self: end; }
   .hud { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 4px; padding: 6px; border-radius: 11px; }
-  .score-stat { display: none; }
   .hud-stat { min-width: 0; padding: 2px 5px; }
   .hud-stat strong { margin-top: 2px; font-size: 13px; }
   .timer-card { min-width: 0; gap: 5px; padding: 4px 6px; border-radius: 8px; }

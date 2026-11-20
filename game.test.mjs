@@ -6,6 +6,7 @@ import {
   createGameState,
   getChallengeProgress,
   getPerformanceRating,
+  getRoundStars,
   getTilePresentation,
   getWaveReview,
   restartGame,
@@ -232,14 +233,24 @@ test('a correct pair enters a resolving phase before it is cleared', () => {
     pairId: pair,
     tileIds: ids,
     rating: 'AMAZING',
-    bonus: 100,
     durationMs: 1_500,
   });
 
   const cleared = completePendingMatch(resolving);
   assert.equal(cleared.status, 'playing');
   assert.equal(cleared.matchedPairIds.includes(pair), true);
-  assert.equal(cleared.score, 100);
+  assert.equal('score' in cleared, false);
+});
+
+test('round stars use the elapsed-time thresholds', () => {
+  assert.equal(getRoundStars(10), 5);
+  assert.equal(getRoundStars(10.01), 4);
+  assert.equal(getRoundStars(15), 4);
+  assert.equal(getRoundStars(15.01), 3);
+  assert.equal(getRoundStars(25), 3);
+  assert.equal(getRoundStars(25.01), 2);
+  assert.equal(getRoundStars(45), 2);
+  assert.equal(getRoundStars(45.01), 1);
 });
 
 test('performance rating uses five inclusive elapsed-time tiers', () => {
@@ -317,11 +328,52 @@ test('hint preserves a selected word and highlights only its counterpart', () =>
   assert.equal(hinted.selectedTileId, pairTiles[0].id);
   assert.equal(hinted.hintTileId, pairTiles[1].id);
   assert.equal(hinted.tiles.length, 15);
-  assert.equal(hinted.score < state.score, true);
+  assert.equal('score' in hinted, false);
 
   const resolving = selectTile(hinted, pairTiles[1].id, 1_600);
   assert.equal(resolving.status, 'resolving');
   assert.equal(resolving.hintTileId, null);
+});
+
+test('each round starts with three free hints', () => {
+  const state = createGameState(7);
+  assert.equal(state.hintsUsed, 0);
+  assert.equal(game.GAME_CONSTANTS.HINT_FREE_USES, 3);
+});
+
+test('the first three hints do not reduce the round timer, then each hint costs ten seconds', () => {
+  let state = createGameState(7);
+  const initialTime = state.timeLeft;
+
+  for (let index = 0; index < 3; index += 1) {
+    state = useHint(state);
+    assert.equal(state.hintsUsed, index + 1);
+    assert.equal(state.timeLeft, initialTime);
+    state = { ...state, hintTileId: null, lastResult: null };
+  }
+
+  state = useHint(state);
+  assert.equal(state.hintsUsed, 4);
+  assert.equal(state.timeLeft, initialTime - 10);
+  state = { ...state, hintTileId: null, lastResult: null };
+  state = useHint(state);
+  assert.equal(state.hintsUsed, 5);
+  assert.equal(state.timeLeft, initialTime - 20);
+});
+
+test('a hint that consumes the last ten seconds ends the round and blocks tile selection', () => {
+  let state = createGameState(7);
+  state = { ...state, hintsUsed: 3, timeLeft: 10 };
+  const expired = useHint(state);
+
+  assert.equal(expired.hintsUsed, 4);
+  assert.equal(expired.timeLeft, 0);
+  assert.equal(expired.status, 'wave-expired');
+  assert.equal(expired.lastResult, 'expired');
+  assert.equal(expired.selectedTileId, null);
+
+  const tile = expired.tiles.find(candidate => !candidate.distractor);
+  assert.strictEqual(selectTile(expired, tile.id, 1_000), expired);
 });
 
 test('hint marks a selected distractor wrong without showing a yellow target', () => {
@@ -334,7 +386,7 @@ test('hint marks a selected distractor wrong without showing a yellow target', (
   assert.equal(hinted.hintTileId, null);
   assert.deepEqual(hinted.wrongTileIds, [distractor.id]);
   assert.equal(hinted.lastResult, 'unpairable');
-  assert.equal(hinted.score, 75);
+  assert.equal('score' in hinted, false);
 });
 
 test('wave review includes phonetics and frequency-ordered meanings for all fifteen words', () => {
