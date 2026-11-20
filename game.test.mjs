@@ -45,6 +45,36 @@ test('creates fifteen tiles with twelve matchable words and three distractors', 
   assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 6);
 });
 
+test('phone mode creates sixteen fully pairable tiles from eight synonym groups', () => {
+  const state = createGameState(7, 1, 0, undefined, [], {}, { mode: 'phone' });
+  const pairTiles = state.tiles.filter((tile) => !tile.distractor);
+
+  assert.equal(state.mode, 'phone');
+  assert.equal(state.tiles.length, 16);
+  assert.equal(pairTiles.length, 16);
+  assert.equal(state.tiles.filter((tile) => tile.distractor).length, 0);
+  assert.equal(new Set(pairTiles.map((tile) => tile.pairId)).size, 8);
+  assert.equal(pairTiles.every((tile) => tile.countsForBookProgress), true);
+});
+
+test('phone mode uses eight pairs for challenge totals and keeps the final group fully pairable', () => {
+  const first = createGameState(7, 1, 0, undefined, [], {}, { mode: 'phone' });
+  const firstPairIds = [...new Set(first.tiles.map((tile) => tile.pairId))];
+  const resumed = createGameState(8, 2, 0, undefined, firstPairIds, {}, { mode: 'phone' });
+
+  assert.equal(first.totalWaves, 2);
+  assert.deepEqual(getChallengeProgress(first), {
+    completedPairs: 0,
+    totalPairs: 12,
+    completedChallenges: 0,
+    totalChallenges: 2,
+  });
+  assert.equal(resumed.tiles.length, 16);
+  assert.equal(resumed.tiles.filter((tile) => tile.distractor).length, 0);
+  assert.equal(new Set(resumed.tiles.map((tile) => tile.pairId)).size, 8);
+  assert.equal(resumed.tiles.filter((tile) => tile.countsForBookProgress).length, 8);
+});
+
 test('creates every tile from the selected vocabulary book', () => {
   const state = createGameState(7, 1, 0, TEST_VOCABULARY);
 

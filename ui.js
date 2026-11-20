@@ -2,6 +2,7 @@ import {
   GAME_CONSTANTS,
   completePendingMatch,
   createGameState,
+  getGameModeConfig,
   getChallengeProgress,
   getRatingPresentation,
   getTilePresentation,
@@ -11,7 +12,7 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=32';
+} from './game.js?v=33';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
@@ -125,7 +126,13 @@ const conflictCloudBook = document.querySelector('#conflict-cloud-book');
 const conflictCloudProgress = document.querySelector('#conflict-cloud-progress');
 const conflictCloudUpdated = document.querySelector('#conflict-cloud-updated');
 
-let state = createGameState(Date.now());
+const getViewportMode = () => (
+  window.matchMedia?.('(max-width: 600px)').matches || window.innerWidth <= 600
+    ? 'phone'
+    : 'desktop'
+);
+
+let state = createGameState(Date.now(), 1, 0, undefined, [], {}, { mode: getViewportMode() });
 let catalog = null;
 let timerId = null;
 let matchTimeout = null;
@@ -214,9 +221,11 @@ const renderConflict = (conflict) => {
 const rebuildFromRecord = async (record) => {
   if (!record || !catalog?.books?.[record.bookId]?.scopes?.[record.scope]) return false;
   const vocabulary = await loadVocabulary(catalog, record.bookId, record.scope);
-  const totalChallenges = Math.ceil(vocabulary.pairs.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
-  const wave = Math.min(totalChallenges, Math.floor(record.completedPairIds.length / GAME_CONSTANTS.PAIRS_PER_WAVE) + 1);
-  state = createGameState(record.seed, wave, record.score, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts });
+  const mode = getViewportMode();
+  const modeConfig = getGameModeConfig(mode);
+  const totalChallenges = Math.ceil(vocabulary.pairs.length / modeConfig.PAIRS_PER_WAVE);
+  const wave = Math.min(totalChallenges, Math.floor(record.completedPairIds.length / modeConfig.PAIRS_PER_WAVE) + 1);
+  state = createGameState(record.seed, wave, record.score, vocabulary, record.completedPairIds, { correctMatches: record.correctMatches, attempts: record.attempts }, { mode });
   const selection = { bookId: record.bookId, scope: record.scope };
   applySetupSelection(selection);
   rememberVocabularySelection(selection);
@@ -442,8 +451,9 @@ const renderResult = () => {
 };
 
 const render = () => {
+  const modeConfig = getGameModeConfig(state.mode);
   const matchedCount = state.matchedPairIds.length;
-  const progress = (matchedCount / GAME_CONSTANTS.PAIRS_PER_WAVE) * 100;
+  const progress = (matchedCount / modeConfig.PAIRS_PER_WAVE) * 100;
   const timeProgress = (state.timeLeft / GAME_CONSTANTS.ROUND_SECONDS) * 100;
   const challengeProgress = getChallengeProgress(state);
   const pairProgress = challengeProgress.totalPairs
@@ -457,7 +467,7 @@ const render = () => {
   timerEl.textContent = String(state.timeLeft).padStart(2, '0');
   timerFill.style.width = `${timeProgress}%`;
   timerCard.classList.toggle('is-warning', state.timeLeft <= 12 && state.status === 'playing');
-  progressEl.textContent = `本局已配对 ${matchedCount} / ${GAME_CONSTANTS.PAIRS_PER_WAVE}`;
+  progressEl.textContent = `本局已配对 ${matchedCount} / ${modeConfig.PAIRS_PER_WAVE}`;
   progressFill.style.width = `${progress}%`;
   bookPairProgress.textContent = `${numberFormatter.format(challengeProgress.completedPairs)} / ${numberFormatter.format(challengeProgress.totalPairs)}`;
   bookPairFill.style.width = `${pairProgress}%`;
@@ -467,7 +477,7 @@ const render = () => {
   comboChip.dataset.active = String(state.combo > 0);
   currentVocabulary.textContent = `${state.vocabularyLabel} · ${numberFormatter.format(state.vocabularyWordCount)} 词`;
   gameSubtitle.textContent = `${state.vocabularyLabel}同义词配对挑战`;
-  footerCopy.textContent = `当前使用 ${state.vocabularyLabel}，每局 15 个词块。`;
+  footerCopy.textContent = `当前使用 ${state.vocabularyLabel}，每局 ${modeConfig.TILES_PER_WAVE} 个词块。`;
   statusLine.textContent = getStatusCopy(state);
   hintButton.disabled = state.status !== 'playing' || state.hintTileId !== null || state.wrongTileIds.length > 0;
   board.setAttribute('aria-busy', String(state.status !== 'playing'));
@@ -650,10 +660,11 @@ const setSetupOpen = (open) => {
 
 const startFreshChallenge = async (selection) => {
   const vocabulary = await loadVocabulary(catalog, selection.bookId, selection.scope);
+  const mode = getViewportMode();
   stopTimer();
   clearScheduledWork();
   reviewOpen = false;
-  state = createGameState(Date.now(), 1, 0, vocabulary);
+  state = createGameState(Date.now(), 1, 0, vocabulary, [], {}, { mode });
   activeChallengeLoaded = true;
   applySetupSelection(selection);
   rememberVocabularySelection(selection);
@@ -754,13 +765,15 @@ const restoreActiveChallenge = async () => {
     return false;
   }
 
-  const completedChallenges = Math.floor(saved.completedPairIds.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
-  const totalChallenges = Math.ceil(vocabulary.pairs.length / GAME_CONSTANTS.PAIRS_PER_WAVE);
+  const mode = getViewportMode();
+  const modeConfig = getGameModeConfig(mode);
+  const completedChallenges = Math.floor(saved.completedPairIds.length / modeConfig.PAIRS_PER_WAVE);
+  const totalChallenges = Math.ceil(vocabulary.pairs.length / modeConfig.PAIRS_PER_WAVE);
   const wave = Math.min(totalChallenges, completedChallenges + 1);
   state = createGameState(saved.seed, wave, saved.score, vocabulary, saved.completedPairIds, {
     correctMatches: saved.correctMatches,
     attempts: saved.attempts,
-  });
+  }, { mode });
   applySetupSelection(saved);
   rememberVocabularySelection(saved);
   activeChallengeLoaded = true;

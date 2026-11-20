@@ -1,10 +1,22 @@
 import { getReviewMeanings, getWordSharedMeaning, resolveSharedMeaning, splitMeanings } from './meanings.js?v=32';
 
 const ROUND_SECONDS = 60;
-const TILES_PER_WAVE = 15;
-const PAIRS_PER_WAVE = 6;
-const DISTRACTORS_PER_WAVE = TILES_PER_WAVE - PAIRS_PER_WAVE * 2;
+const GAME_MODES = Object.freeze({
+  desktop: Object.freeze({
+    TILES_PER_WAVE: 15,
+    PAIRS_PER_WAVE: 6,
+    DISTRACTORS_PER_WAVE: 3,
+  }),
+  phone: Object.freeze({
+    TILES_PER_WAVE: 16,
+    PAIRS_PER_WAVE: 8,
+    DISTRACTORS_PER_WAVE: 0,
+  }),
+});
+const DEFAULT_MODE = 'desktop';
 const HINT_COST = 25;
+
+const getModeConfig = (mode = DEFAULT_MODE) => GAME_MODES[mode] ?? GAME_MODES[DEFAULT_MODE];
 
 const defineWord = (phonetic, ...meaningTexts) => ({
   phonetic,
@@ -139,8 +151,8 @@ const selectUniqueWordPairs = (candidates, limit, seed, usedWords) => {
   return selected;
 };
 
-const assemblePairSelection = (progressCandidates, fillerCandidates, progressLimit, seed) => {
-  const fillerLimit = PAIRS_PER_WAVE - progressLimit;
+const assemblePairSelection = (progressCandidates, fillerCandidates, progressLimit, seed, pairsPerWave) => {
+  const fillerLimit = pairsPerWave - progressLimit;
   let best = { progressPairs: [], fillerPairs: [] };
 
   for (let attempt = 0; attempt < 64; attempt += 1) {
@@ -168,7 +180,8 @@ const assemblePairSelection = (progressCandidates, fillerCandidates, progressLim
   return best;
 };
 
-const pickPairs = (seed, vocabulary, completedBookPairIds) => {
+const pickPairs = (seed, vocabulary, completedBookPairIds, mode = DEFAULT_MODE) => {
+  const { PAIRS_PER_WAVE } = getModeConfig(mode);
   const completedIds = new Set(completedBookPairIds);
   const progressCandidates = vocabulary.pairs.filter((pair) => !completedIds.has(pair.pairId));
   const fillerCandidates = vocabulary.pairs.filter((pair) => completedIds.has(pair.pairId));
@@ -182,6 +195,7 @@ const pickPairs = (seed, vocabulary, completedBookPairIds) => {
     fillerCandidates,
     progressLimit,
     seed,
+    PAIRS_PER_WAVE,
   );
   return [
     ...progressPairs.map((pair) => ({ ...pair, countsForBookProgress: true })),
@@ -189,8 +203,9 @@ const pickPairs = (seed, vocabulary, completedBookPairIds) => {
   ];
 };
 
-const buildTiles = (wave, seed, vocabulary, completedBookPairIds) => {
-  const selectedPairs = pickPairs(seed, vocabulary, completedBookPairIds);
+const buildTiles = (wave, seed, vocabulary, completedBookPairIds, mode = DEFAULT_MODE) => {
+  const { DISTRACTORS_PER_WAVE } = getModeConfig(mode);
+  const selectedPairs = pickPairs(seed, vocabulary, completedBookPairIds, mode);
   const pairedTiles = selectedPairs.flatMap((pair) =>
     pair.words.map((word, variant) => ({
       id: `${pair.pairId}-${variant}`,
@@ -248,10 +263,13 @@ export const createGameState = (
   vocabulary = DEFAULT_VOCABULARY,
   completedBookPairIds = [],
   sessionStats = {},
+  options = {},
 ) => {
+  const mode = GAME_MODES[options.mode] ? options.mode : DEFAULT_MODE;
+  const modeConfig = getModeConfig(mode);
   const validPairIds = new Set(vocabulary.pairs.map((pair) => pair.pairId));
   const normalizedCompletedIds = [...new Set(completedBookPairIds)].filter((pairId) => validPairIds.has(pairId));
-  const totalWaves = Math.ceil(vocabulary.pairs.length / PAIRS_PER_WAVE);
+  const totalWaves = Math.ceil(vocabulary.pairs.length / modeConfig.PAIRS_PER_WAVE);
   return {
     seed,
     wave,
@@ -259,9 +277,10 @@ export const createGameState = (
     vocabulary,
     bookId: vocabulary.bookId,
     scope: vocabulary.scope,
+    mode,
     vocabularyLabel: vocabulary.label,
     vocabularyWordCount: vocabulary.totalWords,
-    tiles: buildTiles(wave, seed, vocabulary, normalizedCompletedIds),
+    tiles: buildTiles(wave, seed, vocabulary, normalizedCompletedIds, mode),
     matchedPairIds: [],
     completedBookPairIds: normalizedCompletedIds,
     selectedTileId: null,
@@ -280,6 +299,7 @@ export const createGameState = (
 };
 
 export const getChallengeProgress = (state) => {
+  const { PAIRS_PER_WAVE } = getModeConfig(state.mode);
   const totalPairs = state.vocabulary.pairs.length;
   const completedPairs = Math.min(totalPairs, new Set(state.completedBookPairIds).size);
   const totalChallenges = Math.ceil(totalPairs / PAIRS_PER_WAVE);
@@ -355,6 +375,7 @@ export const selectTile = (state, tileId, nowMs = Date.now()) => {
 };
 
 export const completePendingMatch = (state) => {
+  const { PAIRS_PER_WAVE } = getModeConfig(state.mode);
   if (state.status !== 'resolving' || !state.pendingMatch) return state;
   const matchedPairIds = [...state.matchedPairIds, state.pendingMatch.pairId];
   const matchedTile = state.tiles.find((tile) => tile.pairId === state.pendingMatch.pairId);
@@ -458,6 +479,7 @@ export const startNextWave = (state) => {
       state.vocabulary,
       state.completedBookPairIds,
       { correctMatches: state.correctMatches, attempts: state.attempts },
+      { mode: state.mode },
     ),
   };
 };
@@ -472,13 +494,14 @@ export const restartGame = (state) => {
     state.vocabulary,
     state.completedBookPairIds,
     { correctMatches: state.correctMatches, attempts: state.attempts },
+    { mode: state.mode },
   );
 };
 
+export const getGameModeConfig = (mode) => ({ ...getModeConfig(mode) });
+
 export const GAME_CONSTANTS = {
   ROUND_SECONDS,
-  TILES_PER_WAVE,
-  PAIRS_PER_WAVE,
-  DISTRACTORS_PER_WAVE,
+  ...GAME_MODES.desktop,
   HINT_COST,
 };
