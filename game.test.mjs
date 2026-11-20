@@ -231,7 +231,7 @@ test('a correct pair enters a resolving phase before it is cleared', () => {
   assert.deepEqual(resolving.pendingMatch, {
     pairId: pair,
     tileIds: ids,
-    rating: 'UNBELIEVABLE',
+    rating: 'AMAZING',
     bonus: 100,
     durationMs: 1_500,
   });
@@ -243,14 +243,14 @@ test('a correct pair enters a resolving phase before it is cleared', () => {
 });
 
 test('performance rating uses five inclusive elapsed-time tiers', () => {
-  assert.equal(getPerformanceRating(10_000).label, 'UNBELIEVABLE');
-  assert.equal(getPerformanceRating(10_001).label, 'AMAZING');
-  assert.equal(getPerformanceRating(20_000).label, 'AMAZING');
-  assert.equal(getPerformanceRating(20_001).label, 'EXCELLENT');
-  assert.equal(getPerformanceRating(30_000).label, 'EXCELLENT');
-  assert.equal(getPerformanceRating(30_001).label, 'PERFECT');
-  assert.equal(getPerformanceRating(40_000).label, 'PERFECT');
-  assert.equal(getPerformanceRating(40_001).label, 'GOOD');
+  assert.equal(getPerformanceRating(1_000).label, 'UNBELIEVABLE');
+  assert.equal(getPerformanceRating(1_001).label, 'AMAZING');
+  assert.equal(getPerformanceRating(3_000).label, 'AMAZING');
+  assert.equal(getPerformanceRating(3_001).label, 'EXCELLENT');
+  assert.equal(getPerformanceRating(5_000).label, 'EXCELLENT');
+  assert.equal(getPerformanceRating(5_001).label, 'PERFECT');
+  assert.equal(getPerformanceRating(8_000).label, 'PERFECT');
+  assert.equal(getPerformanceRating(8_001).label, 'GOOD');
   assert.equal(getPerformanceRating(50_000).label, 'GOOD');
   assert.equal(getPerformanceRating(59_000).label, 'GOOD');
 });

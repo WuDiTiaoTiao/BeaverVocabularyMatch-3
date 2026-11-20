@@ -232,13 +232,13 @@ const buildTiles = (wave, seed, vocabulary, completedBookPairIds, mode = DEFAULT
 };
 
 export const getPerformanceRating = (durationMs) => {
-  const label = durationMs <= 10_000
+  const label = durationMs <= 1_000
     ? 'UNBELIEVABLE'
-    : durationMs <= 20_000
+    : durationMs <= 3_000
       ? 'AMAZING'
-      : durationMs <= 30_000
+      : durationMs <= 5_000
         ? 'EXCELLENT'
-        : durationMs <= 40_000
+        : durationMs <= 8_000
           ? 'PERFECT'
           : 'GOOD';
   const bonus = durationMs <= 2_000 ? 100 : durationMs <= 4_000 ? 70 : 40;
