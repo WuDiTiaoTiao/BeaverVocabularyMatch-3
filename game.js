@@ -4,8 +4,8 @@ const ROUND_SECONDS = 60;
 const GAME_MODES = Object.freeze({
   desktop: Object.freeze({
     TILES_PER_WAVE: 15,
-    PAIRS_PER_WAVE: 6,
-    DISTRACTORS_PER_WAVE: 3,
+    PAIRS_PER_WAVE: 7,
+    DISTRACTORS_PER_WAVE: 1,
   }),
   phone: Object.freeze({
     TILES_PER_WAVE: 16,

@@ -37,12 +37,12 @@ const TEST_VOCABULARY = {
   distractors: ['ielts-word-15', 'ielts-word-16', 'ielts-word-17', 'ielts-word-18'],
 };
 
-test('creates fifteen tiles with twelve matchable words and three distractors', () => {
+test('desktop mode creates fifteen tiles with fourteen matchable words and one distractor', () => {
   const state = createGameState(7);
   assert.equal(state.tiles.length, 15);
-  assert.equal(state.tiles.filter((tile) => !tile.distractor).length, 12);
-  assert.equal(state.tiles.filter((tile) => tile.distractor).length, 3);
-  assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 6);
+  assert.equal(state.tiles.filter((tile) => !tile.distractor).length, 14);
+  assert.equal(state.tiles.filter((tile) => tile.distractor).length, 1);
+  assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 7);
 });
 
 test('phone mode creates sixteen fully pairable tiles from eight synonym groups', () => {
@@ -89,12 +89,12 @@ test('creates every tile from the selected vocabulary book', () => {
 test('derives the total challenge count from the selected vocabulary', () => {
   const state = createGameState(7, 1, 0, TEST_VOCABULARY);
 
-  assert.equal(state.totalWaves, 2);
+  assert.equal(state.totalWaves, 1);
   assert.deepEqual(getChallengeProgress(state), {
     completedPairs: 0,
     totalPairs: 7,
     completedChallenges: 0,
-    totalChallenges: 2,
+    totalChallenges: 1,
   });
 });
 
@@ -109,10 +109,10 @@ test('new challenges exclude completed pairs from book progress', () => {
 
   assert.equal(progressPairIds.has('ielts-pair-1'), false);
   assert.equal(progressPairIds.has('ielts-pair-2'), false);
-  assert.equal(progressPairIds.size, 4);
+  assert.equal(progressPairIds.size, 5);
 });
 
-test('resuming a partial challenge only adds enough new pairs to reach the next group of six', () => {
+test('resuming a partial challenge only adds enough new pairs to reach the next group of seven', () => {
   const completedPairIds = TEST_VOCABULARY.pairs.slice(0, 5).map((pair) => pair.pairId);
   const state = createGameState(7, 1, 0, TEST_VOCABULARY, completedPairIds);
   const progressPairIds = new Set(
@@ -126,11 +126,11 @@ test('resuming a partial challenge only adds enough new pairs to reach the next 
       .map((tile) => tile.pairId),
   );
 
-  assert.equal(progressPairIds.size, 1);
+  assert.equal(progressPairIds.size, 2);
   assert.equal(fillerPairIds.size, 5);
 });
 
-test('starting after exactly six completed pairs still creates fifteen tiles', async () => {
+test('starting after exactly seven completed pairs still creates fifteen tiles', async () => {
   const vocabulary = JSON.parse(await readFile(new URL('./data/cet4-frequent.json', import.meta.url), 'utf8'));
   const firstChallenge = createGameState(7, 1, 0, vocabulary);
   const completedPairIds = [...new Set(
@@ -139,7 +139,7 @@ test('starting after exactly six completed pairs still creates fifteen tiles', a
   const state = createGameState(8, 2, 0, vocabulary, completedPairIds);
 
   assert.equal(state.tiles.length, 15);
-  assert.equal(state.tiles.filter((tile) => !tile.distractor).length, 12);
+  assert.equal(state.tiles.filter((tile) => !tile.distractor).length, 14);
 });
 
 test('a challenge never renders the same English word in two different pair tiles', async () => {
@@ -160,7 +160,7 @@ test('the final challenge is padded to fifteen tiles without counting filler pai
   const matched = completePendingMatch(resolving);
 
   assert.equal(state.tiles.length, 15);
-  assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 6);
+  assert.equal(new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId)).size, 7);
   assert.deepEqual(matched.completedBookPairIds, completedPairIds);
 });
 
@@ -177,8 +177,8 @@ test('matching a new pair updates book-wide progress and completion totals', () 
   assert.deepEqual(getChallengeProgress(matched), {
     completedPairs: 7,
     totalPairs: 7,
-    completedChallenges: 2,
-    totalChallenges: 2,
+    completedChallenges: 1,
+    totalChallenges: 1,
   });
 });
 
@@ -341,8 +341,8 @@ test('wave review includes phonetics and frequency-ordered meanings for all fift
   const state = createGameState(7);
   const review = getWaveReview(state);
   assert.equal(review.totalWords, 15);
-  assert.equal(review.pairs.length, 6);
-  assert.equal(review.extras.length, 3);
+  assert.equal(review.pairs.length, 7);
+  assert.equal(review.extras.length, 1);
   assert.equal(review.pairs.every((pair) => pair.words.length === 2), true);
   assert.equal(review.allWords.every((entry) => entry.word && entry.phonetic), true);
   assert.equal(review.allWords.every((entry) => entry.meanings.length >= 2), true);
@@ -352,7 +352,7 @@ test('wave review includes phonetics and frequency-ordered meanings for all fift
   )), true);
 });
 
-test('clearing the sixth pair completes the wave', () => {
+test('clearing the seventh pair completes the wave', () => {
   const state = createGameState(7);
   const pairIds = [...new Set(state.tiles.filter((tile) => !tile.distractor).map((tile) => tile.pairId))];
   const finalPairId = pairIds.at(-1);
@@ -363,5 +363,5 @@ test('clearing the sixth pair completes the wave', () => {
   const completed = completePendingMatch(resolving);
 
   assert.equal(completed.status, 'wave-cleared');
-  assert.equal(completed.matchedPairIds.length, 6);
+  assert.equal(completed.matchedPairIds.length, 7);
 });

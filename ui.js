@@ -12,7 +12,7 @@ import {
   startNextWave,
   tick,
   useHint,
-} from './game.js?v=33';
+} from './game.js?v=34';
 import {
   loadVocabulary,
   loadVocabularyCatalog,
